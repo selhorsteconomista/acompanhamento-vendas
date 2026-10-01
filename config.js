@@ -1,11 +1,10 @@
-// Preencha com os dados do seu projeto Supabase:
-// Supabase > Project Settings > API (ou Data API)
-//   supabaseUrl     = Project URL
-//   supabaseAnonKey = chave "anon" / "public" (NUNCA use a chave service_role aqui)
-// A chave anon é pública por natureza; quem protege os dados são as regras do arquivo supabase/schema.sql.
+// Configuração do app.
+// supabaseUrl: somente o endereço do projeto, terminando em .supabase.co (sem /rest/v1/)
+// supabaseAnonKey: chave pública (publishable ou anon). NUNCA use a chave secret/service_role aqui.
+// appName / appSubtitle: nome exibido no login, no menu e na aba do navegador.
 window.APP_CONFIG = {
-  supabaseUrl: 'https://wopayovepjcuusymwqj.supabase.co',
-  supabaseAnonKey: 'sb_publishable_GOCxYcPV3udiK3sjvRZC_Q_xm4xL2bw',
+  supabaseUrl: 'https://wotpayovepjcuusymwqj.supabase.co',
+  supabaseAnonKey: 'sb_publishable_GOCxYcPV3udiK3sjvRZC_Q_Xm4xL2bw',
   appName: 'RAEL CONSULTORIA COMERCIAL',
-  appSubtitle: 'Acompanhamento de Vendas'
+  appSubtitle: 'Acompanhamento de vendas'
 };

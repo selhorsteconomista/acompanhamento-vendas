@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#16236B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="RAEL">
+<meta name="apple-mobile-web-app-title" content="Vendas">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>RAEL CONSULTORIA COMERCIAL</title>
+<title>Acompanhamento de Vendas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -217,10 +217,6 @@ body.gated .app{grid-template-columns:1fr}
 .side .sair{display:block;margin-top:10px;color:inherit;opacity:.8;font-size:13px}
 .sair-m{display:none}
 @media (max-width:860px){.sair-m{display:inline-flex}}
-.t .vsub{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
-.glreg{display:flex;justify-content:space-between;align-items:center;padding:8px 2px 4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
-.glreg .link{font-size:13px}
-#g-lojas{max-height:240px}
 /* Combobox */
 .combo{position:relative;display:block}
 .combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-height:260px;overflow:auto;padding:4px}
@@ -314,7 +310,7 @@ body.gated .app{grid-template-columns:1fr}
 <body>
 <div class="app" id="app">
   <aside class="side" aria-label="Navegação">
-    <div class="brand">RAEL CONSULTORIA COMERCIAL<small>Acompanhamento de vendas</small></div>
+    <div class="brand">Vendas do mês<small>Acompanhamento por loja</small></div>
     <nav id="nav"></nav>
     <div class="who" id="who"></div>
   </aside>
@@ -399,7 +395,7 @@ function icon(id){return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id
 
 /* ============ Estado ============ */
 const now=new Date();
-const S={reqSel:new Set(),lojasPub:null,sb:null,channel:null,me:{id:null,name:'',email:''},authView:'entrar',meLoaded:false,perfis:{},pre:[],
+const S={sb:null,channel:null,me:{id:null,name:'',email:''},authView:'entrar',meLoaded:false,perfis:{},pre:[],
   lojas:{},vendedores:{},periodos:{},lanc:{},usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
   loaded:{lojas:false,vendedores:false,periodos:false,lanc:false},periodInit:false,
   view:'dashboard',f:{ano:now.getFullYear(),mes:now.getMonth()+1,regiao:'',uf:'',cidade:'',loja:'',vend:''},
@@ -457,7 +453,7 @@ async function fetchAll(table,cols,order){const out=[];
   for(let from=0;;from+=1000){let q=S.sb.from(table).select(cols);order.forEach(o=>{q=q.order(o);});
     const d=await sbq(q.range(from,from+999));out.push(...d);if(d.length<1000)break;}
   return out;}
-const mapPerfil=x=>x?{id:x.id,nome:x.nome||'',email:x.email||'',mensagem:x.mensagem||'',lojasSolicitadas:x.lojas_solicitadas||[],status:x.status,perfil:x.perfil,regioes:x.regioes||[],lojas:x.lojas||[],
+const mapPerfil=x=>x?{id:x.id,nome:x.nome||'',email:x.email||'',mensagem:x.mensagem||'',status:x.status,perfil:x.perfil,regioes:x.regioes||[],lojas:x.lojas||[],
   solicitadoEm:Date.parse(x.solicitado_em)||null,decididoEm:Date.parse(x.decidido_em)||null,aprovadoEm:Date.parse(x.aprovado_em)||null}:null;
 const LOADERS={
   lojas:async()=>{const r=await fetchAll('lojas','*',['id']);const m={};r.forEach(x=>{m[x.id]={id:x.id,nome:x.nome,regiao:x.regiao||'',uf:x.uf||'',cidade:x.cidade||'',ativo:x.ativo,criadoEm:Date.parse(x.criado_em),_id:keySeg(x.id)};});S.lojas=m;},
@@ -482,16 +478,12 @@ function reloadSoon(t,ms=700){if(!LOADERS[t]||!S.me.id)return;clearTimeout(reloa
   reloadTimers[t]=setTimeout(()=>{if(S.imp&&S.imp.busy&&t!=='historico'){reloadSoon(t,1500);return;}reload(t);},ms);}
 
 /* ============ Boot e autenticação ============ */
-let APP_NAME='RAEL CONSULTORIA COMERCIAL';
 async function boot(){
   renderNav();
   const cfg=window.APP_CONFIG||{};
   if(!window.supabase||!cfg.supabaseUrl||/SEU-PROJETO/.test(cfg.supabaseUrl)||!cfg.supabaseAnonKey||/SUA-CHAVE/.test(cfg.supabaseAnonKey)){
     gate('Configuração pendente','Edite o arquivo config.js com a URL e a chave pública (anon) do seu projeto Supabase. O passo a passo está no README do repositório.');return;}
-  const url=String(cfg.supabaseUrl).trim().replace(/\/(rest|auth|storage|realtime)\/v1.*$/,'').replace(/\/+$/,'');
-  APP_NAME=cfg.appName||APP_NAME;const sub=cfg.appSubtitle||'Acompanhamento por loja';document.title=APP_NAME;
-  const br=$('.brand');if(br)br.innerHTML=`${esc(APP_NAME)}<small>${esc(sub)}</small>`;
-  S.sb=window.supabase.createClient(url,String(cfg.supabaseAnonKey).trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  S.sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   S.sb.auth.onAuthStateChange((ev,session)=>{if(ev==='PASSWORD_RECOVERY')S.authView='novaSenha';setTimeout(()=>handleSession(session),0);});
   const {data}=await S.sb.auth.getSession();handleSession(data.session);
 }
@@ -545,14 +537,14 @@ function renderGateView(st){
   document.body.classList.add('gated');const v=$('#view');const p=S.perfil||{};
   const box=(t,inner,sub='')=>`<div class="gate gate-form"><h1>${esc(t)}</h1>${sub?`<p class="muted">${sub}</p>`:''}${inner}<div class="ferr" id="g-err"></div></div>`;
   const f=(id,l,type='text',val='',extra='')=>`<label class="field"><span>${l}</span><input class="inp" id="${id}" type="${type}" value="${esc(val)}" ${extra}></label>`;
-  const brand=`<div class="gbrand">${esc(APP_NAME)}</div>`;
+  const brand='<div class="gbrand">Vendas do mês</div>';
   const V={
     loading:()=>'<div class="gate"><p class="muted">Carregando…</p></div>',
     entrar:()=>brand+box('Entrar',f('g-email','E-mail','email',S.lastEmail||'','autocomplete="email" inputmode="email"')+f('g-senha','Senha','password','','autocomplete="current-password"')+
       `<div class="gactions"><button class="btn primary" data-act="gLogin">Entrar</button></div><p class="glinks"><button class="link" data-act="gView" data-v="criar">Criar conta</button><button class="link" data-act="gView" data-v="esqueci">Esqueci minha senha</button></p>`),
     criar:()=>brand+box('Criar conta',f('g-nome','Nome completo','text','','autocomplete="name"')+f('g-email','E-mail','email',S.lastEmail||'','autocomplete="email" inputmode="email"')+
       f('g-senha','Senha (mínimo de 8 caracteres)','password','','autocomplete="new-password"')+f('g-senha2','Repita a senha','password','','autocomplete="new-password"')+
-      lojasPickerHTML()+f('g-msg','Observação (opcional)','text','','placeholder="Ex.: gerente da região Sul"')+
+      f('g-msg','Loja ou região onde você trabalha','text','','placeholder="Ex.: Loja 22, Curitiba"')+
       `<div class="gactions"><button class="btn primary" data-act="gSignup">Criar conta e solicitar acesso</button></div><p class="glinks"><button class="link" data-act="gView" data-v="entrar">Já tenho conta</button></p>`,
       'Depois de confirmar o e-mail, um administrador aprova o acesso e define as lojas que você poderá consultar.'),
     confirme:()=>brand+box('Confirme seu e-mail',`<div class="gactions"><button class="btn" data-act="gView" data-v="entrar">Ir para Entrar</button></div>`,
@@ -568,32 +560,11 @@ function renderGateView(st){
     recusado:()=>box('Solicitação não aprovada',`<div class="gactions"><button class="btn" data-act="gSair">Sair</button><button class="btn primary" data-act="reqEdit">Enviar novamente</button></div>`,
       'Um administrador não aprovou seu acesso. Se achar que houve engano, revise seus dados e envie de novo.'),
     bloqueado:()=>box('Acesso suspenso',`<div class="gactions"><button class="btn" data-act="gSair">Sair</button></div>`,'Seu acesso foi suspenso por um administrador. Fale com ele para reativar.'),
-    editarSol:()=>box('Solicitação de acesso',f('g-nome','Nome completo','text',p.nome)+lojasPickerHTML()+f('g-msg','Observação (opcional)','text',p.mensagem)+
+    editarSol:()=>box('Solicitação de acesso',f('g-nome','Nome completo','text',p.nome)+f('g-msg','Loja ou região onde você trabalha','text',p.mensagem)+
       `<div class="gactions"><button class="btn" data-act="reqCancel">Cancelar</button><button class="btn primary" data-act="gReq">Enviar solicitação</button></div>`)};
   v.innerHTML=(V[st]||V.entrar)();
-  if(st==='criar'||st==='editarSol')loadLojasPub();
   const first=v.querySelector('input');if(first&&!first.value&&document.activeElement?.tagName!=='INPUT')first.focus();
 }
-/* Seletor de lojas no cadastro */
-async function loadLojasPub(){if(S.lojasPub||S.lojasPubLoading)return;S.lojasPubLoading=true;
-  try{S.lojasPub=(await sbq(S.sb.rpc('lojas_publicas')))||[];}catch(e){S.lojasPub=[];}
-  S.lojasPubLoading=false;const box=$('#g-lojas');if(box){box.innerHTML=lojasPickerInner();filtraLojasPub();}}
-function lojasPickerHTML(){return `<div class="field"><span>Lojas onde você trabalha</span>
-  <input class="inp" id="g-lq" placeholder="Pesquisar loja, cidade ou região" autocomplete="off">
-  <div class="cklist" id="g-lojas">${lojasPickerInner()}</div><span class="fhint" id="g-lcount">${lcountTxt()}</span></div>`;}
-function lcountTxt(){const n=S.reqSel.size;return n?`${n} ${n===1?'loja marcada':'lojas marcadas'}. O administrador confirma o acesso na aprovação.`:'Marque uma ou mais lojas. Use "Marcar todas" para escolher a região inteira.';}
-function lojasPickerInner(){if(!S.lojasPub)return '<p class="muted">Carregando lojas…</p>';
-  if(!S.lojasPub.length)return '<p class="muted">Nenhuma loja cadastrada ainda. Use o campo de observação para dizer onde você trabalha.</p>';
-  const by={};S.lojasPub.forEach(l=>{(by[l.regiao||'Sem região']=by[l.regiao||'Sem região']||[]).push(l);});
-  return Object.keys(by).sort(sortPt).map(r=>`<div class="glreg" data-reg="${esc(r)}"><b>${esc(r)}</b><button class="link" data-act="glReg" data-v="${esc(r)}">Marcar todas</button></div>`+
-    by[r].sort((a,b)=>sortPt(a.id,b.id)).map(l=>`<label class="ck" data-reg="${esc(r)}" data-s="${esc(norm([l.id,l.nome,l.cidade,l.uf,r].join(' ')))}"><input type="checkbox" data-gl="${esc(l.id)}" ${S.reqSel.has(l.id)?'checked':''}> <b>${esc(l.nome)}</b> <span class="muted">${esc([l.cidade,l.uf].filter(Boolean).join('/'))}</span></label>`).join('')).join('');}
-function filtraLojasPub(){const q=norm($('#g-lq')?.value||'');const box=$('#g-lojas');if(!box)return;
-  $$('label[data-s]',box).forEach(l=>{l.style.display=!q||l.dataset.s.includes(q)?'':'none';});
-  $$('.glreg',box).forEach(h=>{h.style.display=$$(`label[data-reg="${CSS.escape(h.dataset.reg)}"]`,box).some(l=>l.style.display!=='none')?'':'none';});}
-function marcaRegiao(r){const box=$('#g-lojas');if(!box)return;const ls=$$(`label[data-reg="${CSS.escape(r)}"]`,box).filter(l=>l.style.display!=='none').map(l=>l.querySelector('input'));
-  const todas=ls.every(i=>i.checked);ls.forEach(i=>{i.checked=!todas;todas?S.reqSel.delete(i.dataset.gl):S.reqSel.add(i.dataset.gl);});const c=$('#g-lcount');if(c)c.textContent=lcountTxt();}
-document.addEventListener('change',e=>{const i=e.target;if(i.dataset&&i.dataset.gl!=null){i.checked?S.reqSel.add(i.dataset.gl):S.reqSel.delete(i.dataset.gl);const c=$('#g-lcount');if(c)c.textContent=lcountTxt();}});
-document.addEventListener('input',e=>{if(e.target.id==='g-lq')filtraLojasPub();});
 const gv=id=>($('#'+id)?.value||'').trim();
 function gErr(m){const e=$('#g-err');if(e)e.textContent=m;}
 function busyBtn(act,on){const b=$(`[data-act="${act}"]`);if(b){b.disabled=on;}}
@@ -603,9 +574,8 @@ async function gLogin(){const email=gv('g-email'),senha=$('#g-senha').value;S.la
 async function gSignup(){const nome=gv('g-nome'),email=gv('g-email'),senha=$('#g-senha').value,senha2=$('#g-senha2').value,mensagem=gv('g-msg');S.lastEmail=email;
   if(nome.length<3)return gErr('Informe seu nome completo.');if(!emailOk(email))return gErr('Informe um e-mail válido, como nome@empresa.com.br.');
   if(senha.length<8)return gErr('A senha precisa ter pelo menos 8 caracteres.');if(senha!==senha2)return gErr('As senhas não são iguais.');
-  if(S.lojasPub&&S.lojasPub.length&&!S.reqSel.size)return gErr('Marque pelo menos uma loja onde você trabalha.');
   busyBtn('gSignup',true);
-  const {data,error}=await S.sb.auth.signUp({email,password:senha,options:{data:{nome,mensagem,lojas:[...S.reqSel]},emailRedirectTo:location.origin+location.pathname}});
+  const {data,error}=await S.sb.auth.signUp({email,password:senha,options:{data:{nome,mensagem},emailRedirectTo:location.origin+location.pathname}});
   busyBtn('gSignup',false);if(error)return gErr(authErr(error));
   if(!data.session){S.authView='confirme';render();}}
 async function gForgot(){const email=gv('g-email');S.lastEmail=email;if(!emailOk(email))return gErr('Informe um e-mail válido.');
@@ -614,9 +584,8 @@ async function gForgot(){const email=gv('g-email');S.lastEmail=email;if(!emailOk
 async function gNewPass(){const a=$('#g-senha').value,b=$('#g-senha2').value;if(a.length<8)return gErr('A senha precisa ter pelo menos 8 caracteres.');if(a!==b)return gErr('As senhas não são iguais.');
   const {error}=await S.sb.auth.updateUser({password:a});if(error)return gErr(authErr(error));S.authView=null;toast('Senha alterada.');render();}
 async function gReq(){const nome=gv('g-nome'),mensagem=gv('g-msg');if(nome.length<3)return gErr('Informe seu nome completo.');
-  if(S.lojasPub&&S.lojasPub.length&&!S.reqSel.size)return gErr('Marque pelo menos uma loja onde você trabalha.');
-  try{await sbq(S.sb.rpc('solicitar_acesso',{p_nome:nome,p_mensagem:mensagem,p_lojas:[...S.reqSel]}));S.reqEdit=false;await loadMe();toast('Solicitação enviada.');render();}catch(e){gErr(dbErr(e));}}
-document.addEventListener('keydown',e=>{if(e.key!=='Enter'||!document.body.classList.contains('gated')||e.target.tagName!=='INPUT'||e.target.id==='g-lq'||e.target.dataset.gl!=null)return;
+  try{await sbq(S.sb.rpc('solicitar_acesso',{p_nome:nome,p_mensagem:mensagem}));S.reqEdit=false;await loadMe();toast('Solicitação enviada.');render();}catch(e){gErr(dbErr(e));}}
+document.addEventListener('keydown',e=>{if(e.key!=='Enter'||!document.body.classList.contains('gated')||e.target.tagName!=='INPUT')return;
   const b=$('#view .gactions .btn.primary');if(b){e.preventDefault();b.click();}});
 const userName=id=>id===S.me.id?(S.me.name||'Você'):(S.perfis?.[id]?.nome||'Usuário');
 
@@ -711,8 +680,8 @@ document.addEventListener('click',e=>{
     newPer:()=>formPer(null),editPer:()=>formPer(d.id),delPer:()=>delPer(d.id),
     filterLoja:()=>{const l=S.lojas[d.id];S.f.loja=d.id;S.f.regiao=l?.regiao||'';S.f.uf=l?.uf||'';S.f.cidade=l?.cidade||'';S.f.vend='';closeModal();render();},
     pickMun:()=>$('#munfile')?.click(),
-    gView:()=>{if(d.v==='criar'){S.reqSel=new Set();S.lojasPub=null;}S.authView=d.v;render();},glReg:()=>marcaRegiao(d.v),gLogin:()=>gLogin(),gSignup:()=>gSignup(),gForgot:()=>gForgot(),gNewPass:()=>gNewPass(),gReq:()=>gReq(),gSair:()=>sair(),
-    reqEdit:()=>{S.reqSel=new Set(S.perfil?.lojasSolicitadas||[]);S.lojasPub=null;S.reqEdit=true;render();},reqCancel:()=>{S.reqEdit=false;render();},
+    gView:()=>{S.authView=d.v;render();},gLogin:()=>gLogin(),gSignup:()=>gSignup(),gForgot:()=>gForgot(),gNewPass:()=>gNewPass(),gReq:()=>gReq(),gSair:()=>sair(),
+    reqEdit:()=>{S.reqEdit=true;render();},reqCancel:()=>{S.reqEdit=false;render();},
     preNovo:()=>formAcesso(null,{pre:true}),preDel:()=>confirmBox('Remover pré-aprovação',`Remover a pré-aprovação de ${esc(d.id)}?`,'Remover',()=>preDel(d.id)),restore:()=>pickRestore(),ibge:()=>baixarIBGE(),
     aprovar:()=>formAcesso(d.id),editAcesso:()=>formAcesso(d.id),
     recusar:()=>confirmBox('Recusar solicitação',`Recusar o acesso de ${esc(userName(d.id))}?`,'Recusar',()=>setStatus(d.id,'recusado','Recusou a solicitação de','Solicitação recusada.')),
@@ -1540,7 +1509,7 @@ function viewUsers(v){destroyCharts();
   <div class="bar"><p class="muted" style="margin:0;flex:1;min-width:260px">Cada pessoa cria a própria conta com e-mail e senha e confirma o e-mail. Depois disso, a solicitação aparece aqui para aprovação. Você também pode pré-aprovar um e-mail antes do cadastro.</p>
     <button class="btn" data-act="preNovo">Pré-aprovar e-mail</button></div>
   <h2 class="sec">Solicitações pendentes <small>${pend.length}</small></h2>
-  ${pend.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Lojas solicitadas</th><th>Enviada em</th><th></th></tr></thead><tbody>${pend.map(s=>`<tr><td>${esc(s.nome)}</td><td>${esc(s.email)}</td><td style="white-space:normal;min-width:200px">${esc((s.lojasSolicitadas||[]).map(lojaNome).join(', ')||'—')}${s.mensagem?`<span class="vsub">${esc(s.mensagem)}</span>`:''}</td><td class="num">${fmtDT(s.solicitadoEm)}</td><td class="r"><button class="btn small primary" data-act="aprovar" data-id="${esc(s.id)}">Aprovar</button> <button class="btn small danger" data-act="recusar" data-id="${esc(s.id)}">Recusar</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><p>Nenhuma solicitação aguardando aprovação.</p></div>'}
+  ${pend.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Loja ou região informada</th><th>Enviada em</th><th></th></tr></thead><tbody>${pend.map(s=>`<tr><td>${esc(s.nome)}</td><td>${esc(s.email)}</td><td style="white-space:normal">${esc(s.mensagem||'—')}</td><td class="num">${fmtDT(s.solicitadoEm)}</td><td class="r"><button class="btn small primary" data-act="aprovar" data-id="${esc(s.id)}">Aprovar</button> <button class="btn small danger" data-act="recusar" data-id="${esc(s.id)}">Recusar</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><p>Nenhuma solicitação aguardando aprovação.</p></div>'}
   <h2 class="sec">Usuários com acesso <small>${us.length}</small></h2>
   ${us.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Acesso</th><th>Situação</th><th>Aprovado em</th><th></th></tr></thead><tbody>${us.map(u=>{const self=u.id===S.me.id;return `<tr><td>${esc(u.nome||'—')}${self?' (você)':''}</td><td>${esc(u.email)}</td><td>${PERFIL_LABEL[u.perfil]||'—'}</td><td style="white-space:normal;min-width:220px">${esc(acessoTxt(u))}</td><td>${u.status==='bloqueado'?'<span class="badge below">Suspenso</span>':'<span class="badge hit">Ativo</span>'}</td><td class="num">${fmtDate(u.aprovadoEm||u.decididoEm)}</td>
     <td class="r">${self?'':`<button class="btn small" data-act="editAcesso" data-id="${esc(u.id)}">Editar acesso</button> ${u.status==='bloqueado'?`<button class="btn small" data-act="reativar" data-id="${esc(u.id)}">Reativar</button>`:`<button class="btn small danger" data-act="suspender" data-id="${esc(u.id)}">Suspender</button>`}`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty"><p>Nenhum usuário aprovado ainda.</p></div>'}
@@ -1549,14 +1518,13 @@ function viewUsers(v){destroyCharts();
 function formAcesso(uid,{pre=false}={}){
   const u=pre?{}:(S.perfis[uid]||{});const nome0=u.nome||'',email0=u.email||'';
   const regs=[...new Set(Object.values(S.lojas).map(l=>l.regiao||'').filter(Boolean))].sort(sortPt);
-  const st={perfil:u.perfil&&u.status!=='recusado'?u.perfil:'vendas',regioes:new Set(u.regioes||[]),lojas:new Set(u.status!=='aprovado'&&!(u.lojas||[]).length?(u.lojasSolicitadas||[]):(u.lojas||[])),q:'',email:'',nome:''};
-  const preMarcadas=u.status!=='aprovado'&&!(u.lojas||[]).length&&(u.lojasSolicitadas||[]).length>0;
+  const st={perfil:u.perfil&&u.status!=='recusado'?u.perfil:'vendas',regioes:new Set(u.regioes||[]),lojas:new Set(u.lojas||[]),q:'',email:'',nome:''};
   const lojasAll=Object.values(S.lojas).sort((a,b)=>sortPt(a.id,b.id));
   openModal(pre?'Pré-aprovar e-mail':`Acesso de ${nome0||email0}`,()=>{
     const fil=lojasAll.filter(l=>(!st.regioes.size||st.regioes.has(l.regiao||''))&&(!st.q||norm([l.id,l.nome,l.cidade,l.uf].join(' ')).includes(norm(st.q))));
     const viaReg=l=>st.perfil==='gestao'&&st.regioes.has(l.regiao||'');
     const tot=lojasPermitidas({perfil:st.perfil,regioes:[...st.regioes],lojas:[...st.lojas]}).length;
-    return `${pre?`<label class="field"><span>E-mail da pessoa</span><input class="inp" id="ac-email" type="email" inputmode="email" value="${esc(st.email)}"></label><label class="field"><span>Nome (opcional)</span><input class="inp" id="ac-nome" value="${esc(st.nome)}"></label><p class="fhint" style="margin-top:-6px">Quando essa pessoa criar a conta com este e-mail, ela já entra com o acesso abaixo.</p>`:`<p class="muted" style="margin-top:0">${esc(email0)}${u.mensagem?`. Observação: ${esc(u.mensagem)}`:''}</p>${preMarcadas?'<div class="notice">As lojas que a pessoa solicitou já vêm marcadas. Confira e ajuste antes de aprovar.</div>':''}`}
+    return `${pre?`<label class="field"><span>E-mail da pessoa</span><input class="inp" id="ac-email" type="email" inputmode="email" value="${esc(st.email)}"></label><label class="field"><span>Nome (opcional)</span><input class="inp" id="ac-nome" value="${esc(st.nome)}"></label><p class="fhint" style="margin-top:-6px">Quando essa pessoa criar a conta com este e-mail, ela já entra com o acesso abaixo.</p>`:`<p class="muted" style="margin-top:0">${esc(email0)}${u.mensagem?`. Informou: ${esc(u.mensagem)}`:''}</p>`}
     <div class="field"><span>Perfil</span><div class="seg" role="radiogroup">${[['vendas','Vendas'],['gestao','Gestão'],['admin','Administrador']].map(([k,l])=>`<button data-act="acPerfil" data-v="${k}" aria-pressed="${st.perfil===k}">${l}</button>`).join('')}</div>
       <span class="fhint">${{vendas:'Consulta somente as lojas marcadas abaixo.',gestao:'Consulta todas as lojas das regiões marcadas, inclusive lojas abertas depois, e as lojas marcadas abaixo.',admin:'Acesso total: importação, cadastros, edição, usuários e todas as lojas.'}[st.perfil]}</span></div>
     ${st.perfil==='admin'?'':`
