@@ -5,7 +5,7 @@
 // A chave anon é pública por natureza; quem protege os dados são as regras do arquivo supabase/schema.sql.
 window.APP_CONFIG = {
   supabaseUrl: 'https://wopayovepjcuusymwqj.supabase.co',
-  supabaseAnonKey: 'sb_publishable_GOCxYcPV3udiK3sjvRZC_Q_xm4xL2bw'
+  supabaseAnonKey: 'sb_publishable_GOCxYcPV3udiK3sjvRZC_Q_xm4xL2bw',
   appName: 'RAEL CONSULTORIA COMERCIAL',
   appSubtitle: 'Acompanhamento de Vendas'
 };
