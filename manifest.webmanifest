@@ -1,14 +1,14 @@
 {
-  "name": "RAEL Consultoria Comercial",
-  "short_name": "RAEL",
-  "description": "RAEL Consultoria Comercial: acompanhamento mensal de vendas por loja e vendedor",
+  "name": "Tintomax Comércio de Tintas LTDA",
+  "short_name": "Tintomax",
+  "description": "Tintomax Comércio de Tintas LTDA: acompanhamento mensal de vendas por loja e vendedor",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#F1F3F8",
-  "theme_color": "#16236B",
+  "background_color": "#F4F3F1",
+  "theme_color": "#C94A0A",
   "icons": [
     {
       "src": "icon-192.png",

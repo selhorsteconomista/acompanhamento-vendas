@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#16236B">
+<meta name="theme-color" content="#C94A0A">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="RAEL">
+<meta name="apple-mobile-web-app-title" content="Tintomax">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>RAEL CONSULTORIA COMERCIAL</title>
+<title>Tintomax Comércio de Tintas LTDA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -21,30 +21,30 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <style>
 :root{
-  --paper:#F1F3F8; --surface:#FFFFFF; --surface-2:#F7F8FB; --ink:#141B33; --ink-2:#4A5372; --ink-3:#7B84A0;
-  --line:#DCE1EB; --brand:#16236B; --brand-2:#24338A; --on-brand:#FFFFFF;
-  --amber:#E8A800; --amber-soft:#FFF3C4; --amber-ink:#4A3600;
-  --below:#C2410C; --below-soft:#FDE8DD; --hit:#0F766E; --hit-soft:#D7F2EE; --over:#1E3FB0; --over-soft:#DDE5FF; --nd:#7B84A0;
-  --danger:#B42318; --focus:#3B5BDB; --meta-bar:#C9CFDD; --y4:#7C3AED; --y5:#64748B; --y6:#DB2777;
+  --paper:#F4F3F1; --surface:#FFFFFF; --surface-2:#F8F7F5; --ink:#1F1D1B; --ink-2:#55514C; --ink-3:#8A857E;
+  --line:#E4E0DA; --brand:#C94A0A; --brand-2:#E0560C; --on-brand:#FFFFFF; --alt:#3F3F46;
+  --amber:#FF6412; --amber-soft:#FFEFE4; --amber-ink:#7A2E05;
+  --below:#C62828; --below-soft:#FDE4E4; --hit:#0F766E; --hit-soft:#D7F2EE; --over:#1E3FB0; --over-soft:#DDE5FF; --nd:#8A857E;
+  --danger:#B42318; --focus:#C94A0A; --meta-bar:#D6D2CC; --y4:#7C3AED; --y5:#64748B; --y6:#DB2777;
   --f-ui:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --f-num:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --paper:#0D1222; --surface:#151B31; --surface-2:#1A2140; --ink:#E7EAF4; --ink-2:#A8AFC7; --ink-3:#7880A0;
-    --line:#2A3356; --brand:#1C2A78; --brand-2:#2A3B96; --on-brand:#FFFFFF;
-    --amber:#F2B705; --amber-soft:#3A2F0A; --amber-ink:#FFE7A0;
-    --below:#FB8B5B; --below-soft:#3B2117; --hit:#4FD1C0; --hit-soft:#123532; --over:#93A9FF; --over-soft:#1D2B5E; --nd:#7880A0;
-    --danger:#FF8A80; --focus:#93A9FF; --meta-bar:#3A4468; --y4:#B794F6; --y5:#94A3B8; --y6:#F472B6; color-scheme:dark;
+    --paper:#141210; --surface:#1E1B18; --surface-2:#25211D; --ink:#F2EEE9; --ink-2:#B8B1A8; --ink-3:#8A847C;
+    --line:#3A342E; --brand:#B8460C; --brand-2:#D45410; --on-brand:#FFFFFF; --alt:#A1A1AA;
+    --amber:#FF7A33; --amber-soft:#3A2416; --amber-ink:#FFD3B8;
+    --below:#FF7B7B; --below-soft:#3B1A1A; --hit:#4FD1C0; --hit-soft:#123532; --over:#93A9FF; --over-soft:#1D2B5E; --nd:#8A847C;
+    --danger:#FF8A80; --focus:#FF7A33; --meta-bar:#4A433C; --y4:#B794F6; --y5:#94A3B8; --y6:#F472B6; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --paper:#0D1222; --surface:#151B31; --surface-2:#1A2140; --ink:#E7EAF4; --ink-2:#A8AFC7; --ink-3:#7880A0;
-  --line:#2A3356; --brand:#1C2A78; --brand-2:#2A3B96; --on-brand:#FFFFFF;
-  --amber:#F2B705; --amber-soft:#3A2F0A; --amber-ink:#FFE7A0;
-  --below:#FB8B5B; --below-soft:#3B2117; --hit:#4FD1C0; --hit-soft:#123532; --over:#93A9FF; --over-soft:#1D2B5E; --nd:#7880A0;
-  --danger:#FF8A80; --focus:#93A9FF; --meta-bar:#3A4468; --y4:#B794F6; --y5:#94A3B8; --y6:#F472B6; color-scheme:dark;
+    --paper:#141210; --surface:#1E1B18; --surface-2:#25211D; --ink:#F2EEE9; --ink-2:#B8B1A8; --ink-3:#8A847C;
+    --line:#3A342E; --brand:#B8460C; --brand-2:#D45410; --on-brand:#FFFFFF; --alt:#A1A1AA;
+    --amber:#FF7A33; --amber-soft:#3A2416; --amber-ink:#FFD3B8;
+    --below:#FF7B7B; --below-soft:#3B1A1A; --hit:#4FD1C0; --hit-soft:#123532; --over:#93A9FF; --over-soft:#1D2B5E; --nd:#8A847C;
+    --danger:#FF8A80; --focus:#FF7A33; --meta-bar:#4A433C; --y4:#B794F6; --y5:#94A3B8; --y6:#F472B6; color-scheme:dark;
 }
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -63,7 +63,7 @@ img{max-width:100%}
 .brand small{display:block;font:500 13px var(--f-ui);opacity:.7;margin-top:4px}
 .navbtn{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:inherit;padding:10px 10px;border-radius:8px;cursor:pointer;text-align:left;font-weight:500;opacity:.82}
 .navbtn:hover{background:rgba(255,255,255,.08);opacity:1}
-.navbtn[aria-current="page"]{background:rgba(255,255,255,.14);opacity:1;box-shadow:inset 3px 0 0 var(--amber)}
+.navbtn[aria-current="page"]{background:rgba(255,255,255,.18);opacity:1;box-shadow:inset 3px 0 0 #fff}
 .navbtn svg{width:18px;height:18px;flex:none}
 .side .who{margin-top:auto;padding:12px 10px 0;border-top:1px solid rgba(255,255,255,.15);font-size:13px;opacity:.9}
 .who b{display:block;font-weight:600;font-size:14px}
@@ -152,8 +152,8 @@ table.t{border-collapse:collapse;width:100%;font-size:14px}
 .sheet-head h3{margin:0;font:700 19px/1.2 var(--f-num);letter-spacing:.2px}
 .sheet-head .meta{margin-left:auto;display:flex;gap:14px;align-items:center;font-size:13px;flex-wrap:wrap}
 .sheet-head .dias{display:flex;align-items:center;gap:6px}
-.sheet-head .dias input{width:52px;text-align:center;background:var(--amber);color:#2A1F00;border:0;border-radius:6px;padding:4px;font:700 15px var(--f-num)}
-.sheet-head .dias b{background:var(--amber);color:#2A1F00;border-radius:6px;padding:2px 10px;font:700 15px var(--f-num)}
+.sheet-head .dias input{width:52px;text-align:center;background:#fff;color:var(--brand);border:0;border-radius:6px;padding:4px;font:700 15px var(--f-num)}
+.sheet-head .dias b{background:#fff;color:var(--brand);border-radius:6px;padding:2px 10px;font:700 15px var(--f-num)}
 .sheet .tw{border:0;border-radius:0}
 table.g{border-collapse:separate;border-spacing:0;width:100%;min-width:1040px}
 .g th{background:var(--surface-2);color:var(--ink-2);font:600 13px var(--f-num);padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -198,7 +198,7 @@ table.g{border-collapse:separate;border-spacing:0;width:100%;min-width:1040px}
 .kmat .kv{display:block;font:600 17px var(--f-num);font-variant-numeric:tabular-nums}
 .kmat .kd{display:block;font:600 13.5px var(--f-num);margin-top:2px}
 .kmat .kd .muted{font:400 12px var(--f-ui)}
-.nbadge{margin-left:auto;background:var(--amber);color:#2A1F00;font:700 12px var(--f-num);border-radius:99px;padding:1px 8px}
+.nbadge{margin-left:auto;background:#fff;color:var(--brand);font:700 12px var(--f-num);border-radius:99px;padding:1px 8px}
 body.gated .side,body.gated .topbar,body.gated .tabbar{display:none}
 body.gated .app{grid-template-columns:1fr}
 .gate.gate-form{text-align:left}
@@ -221,6 +221,10 @@ body.gated .app{grid-template-columns:1fr}
 .glreg{display:flex;justify-content:space-between;align-items:center;padding:8px 2px 4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
 .glreg .link{font-size:13px}
 #g-lojas{max-height:240px}
+.blogo{display:block;width:fit-content;max-width:100%;margin-top:12px;background:#fff;border-radius:8px;padding:7px 10px}
+.blogo img{display:block;max-height:38px;max-width:170px;height:auto;width:auto}
+.glogo{display:block;width:fit-content;margin:10px auto 0;background:#fff;border-radius:8px;padding:6px 10px}
+.glogo img{display:block;max-height:34px;max-width:180px}
 /* Combobox */
 .combo{position:relative;display:block}
 .combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-height:260px;overflow:auto;padding:4px}
@@ -303,7 +307,7 @@ body.gated .app{grid-template-columns:1fr}
   .kpi.hero .v{font-size:44px}
   .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--brand);color:var(--on-brand);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
   .tabbar button{flex:1;border:0;background:none;color:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;padding:4px 0;opacity:.75;cursor:pointer}
-  .tabbar button[aria-current="page"]{opacity:1;color:var(--amber)}
+  .tabbar button[aria-current="page"]{opacity:1;color:#fff;font-weight:700}
   .tabbar svg{width:20px;height:20px}
   .topactions .lbl{display:none}
 }
@@ -314,7 +318,7 @@ body.gated .app{grid-template-columns:1fr}
 <body>
 <div class="app" id="app">
   <aside class="side" aria-label="Navegação">
-    <div class="brand">RAEL CONSULTORIA COMERCIAL<small>Acompanhamento de vendas</small></div>
+    <div class="brand">Tintomax Comércio de Tintas LTDA<small>Acompanhamento de vendas</small></div>
     <nav id="nav"></nav>
     <div class="who" id="who"></div>
   </aside>
@@ -482,7 +486,9 @@ function reloadSoon(t,ms=700){if(!LOADERS[t]||!S.me.id)return;clearTimeout(reloa
   reloadTimers[t]=setTimeout(()=>{if(S.imp&&S.imp.busy&&t!=='historico'){reloadSoon(t,1500);return;}reload(t);},ms);}
 
 /* ============ Boot e autenticação ============ */
-let APP_NAME='RAEL CONSULTORIA COMERCIAL';
+let APP_LOGO='',APP_LOGO_ALT='Logo';
+const logoHTML=cls=>APP_LOGO?`<span class="${cls}"><img src="${esc(APP_LOGO)}" alt="${esc(APP_LOGO_ALT)}" onerror="this.parentElement.remove()"></span>`:'';
+let APP_NAME='Tintomax Comércio de Tintas LTDA';
 async function boot(){
   renderNav();
   const cfg=window.APP_CONFIG||{};
@@ -490,7 +496,8 @@ async function boot(){
     gate('Configuração pendente','Edite o arquivo config.js com a URL e a chave pública (anon) do seu projeto Supabase. O passo a passo está no README do repositório.');return;}
   const url=String(cfg.supabaseUrl).trim().replace(/\/(rest|auth|storage|realtime)\/v1.*$/,'').replace(/\/+$/,'');
   APP_NAME=cfg.appName||APP_NAME;const sub=cfg.appSubtitle||'Acompanhamento por loja';document.title=APP_NAME;
-  const br=$('.brand');if(br)br.innerHTML=`${esc(APP_NAME)}<small>${esc(sub)}</small>`;
+  APP_LOGO=cfg.logoUrl===undefined?'logo.png':(cfg.logoUrl||'');APP_LOGO_ALT=cfg.logoAlt||'Logo';
+  const br=$('.brand');if(br)br.innerHTML=`${esc(APP_NAME)}<small>${esc(sub)}</small>${logoHTML('blogo')}`;
   S.sb=window.supabase.createClient(url,String(cfg.supabaseAnonKey).trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   S.sb.auth.onAuthStateChange((ev,session)=>{if(ev==='PASSWORD_RECOVERY')S.authView='novaSenha';setTimeout(()=>handleSession(session),0);});
   const {data}=await S.sb.auth.getSession();handleSession(data.session);
@@ -545,7 +552,7 @@ function renderGateView(st){
   document.body.classList.add('gated');const v=$('#view');const p=S.perfil||{};
   const box=(t,inner,sub='')=>`<div class="gate gate-form"><h1>${esc(t)}</h1>${sub?`<p class="muted">${sub}</p>`:''}${inner}<div class="ferr" id="g-err"></div></div>`;
   const f=(id,l,type='text',val='',extra='')=>`<label class="field"><span>${l}</span><input class="inp" id="${id}" type="${type}" value="${esc(val)}" ${extra}></label>`;
-  const brand=`<div class="gbrand">${esc(APP_NAME)}</div>`;
+  const brand=`<div class="gbrand">${esc(APP_NAME)}${logoHTML('glogo')}</div>`;
   const V={
     loading:()=>'<div class="gate"><p class="muted">Carregando…</p></div>',
     entrar:()=>brand+box('Entrar',f('g-email','E-mail','email',S.lastEmail||'','autocomplete="email" inputmode="email"')+f('g-senha','Senha','password','','autocomplete="current-password"')+
@@ -823,7 +830,7 @@ function sheetHTML(lojaId,ano,mes){
       <td class="stfill ${s.c}">${fmtSigned(T.status)}</td><td class="stfill ${s.c}">${fmtPct(T.pct)}</td></tr>
     <tr class="md"><td>Meta diária</td><td>${dias?fmtBRL(T.meta/dias):'—'}</td><td colspan="7" style="text-align:left;color:var(--ink-3)">${s.t}${upd?`, atualizado em ${fmtDT(upd)}`:''}</td></tr>
     </tbody></table></div>
-    ${ed?`<div class="sheet-foot">Células em amarelo aceitam digitação. Valores são acumulados do mês. <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
+    ${ed?`<div class="sheet-foot">Células em laranja claro aceitam digitação. Valores são acumulados do mês. <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
   </section>`;
 }
 
@@ -929,7 +936,7 @@ function vendLabel(g){const lj=S.vendedores[g.k]?.lojaId||g.rows[0]?.lojaId;retu
 function chartBox(id,title,hint,{wide=false,scroll=false,extra=''}={}){
   return `<div class="chart${wide?' wide':''}"><div class="chead"><div><h3>${title}</h3>${hint?`<p class="hint">${hint}</p>`:''}</div>${extra}</div><div class="${scroll?'cscroll-y':''}"><div class="cbox" id="cb-${id}"><canvas id="c-${id}" role="img" aria-label="${esc(title)}"></canvas></div></div></div>`;}
 function drawDashboardCharts(rows,byLoja,byVend){
-  const brand=css('--brand'),soft=css('--meta-bar'),amber=css('--amber'),ink=css('--ink-3');
+  const brand=css('--brand'),soft=css('--meta-bar'),amber=css('--alt'),ink=css('--ink-3');
   const money=v=>fmtShort(v),pct=v=>fmtPct(v);
   const lojas=[...byLoja].sort((a,b)=>b.c.liq-a.c.liq);
   setH('cb-loja',Math.max(240,lojas.length*46+70));
@@ -972,7 +979,7 @@ function drawDashboardCharts(rows,byLoja,byVend){
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>schedule());
 
 /* ============ Comparativo anual ============ */
-const YCOL=['--brand','--amber','--hit','--y4','--y5','--y6'];
+const YCOL=['--brand','--alt','--hit','--y4','--y5','--y6'];
 function cmpState(){
   const anosDados=[...new Set(Object.values(S.lanc).map(x=>x.ano))].sort((a,b)=>a-b);
   const c=S.cmp;let anos=(c.anos&&c.anos.length)?[...c.anos]:anosDados.slice(-2);
