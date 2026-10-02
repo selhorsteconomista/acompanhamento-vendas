@@ -5,6 +5,6 @@
 window.APP_CONFIG = {
   supabaseUrl: 'https://wotpayovepjcuusymwqj.supabase.co',
   supabaseAnonKey: 'sb_publishable_GOCxYcPV3udiK3sjvRZC_Q_Xm4xL2bw',
-  appName: 'RAEL CONSULTORIA COMERCIAL',
+  appName: 'TINTOMAX',
   appSubtitle: 'Acompanhamento de vendas'
 };
