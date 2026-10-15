@@ -357,7 +357,7 @@ const VIEWS=[
   {id:'dashboard',label:'Painel',short:'Painel'},
   {id:'acomp',label:'Acompanhamento',short:'Mensal'},
   {id:'anual',label:'Comparativo anual',short:'Anual'},
-  {id:'importar',label:'Importar CSV',short:'Importar',admin:true},
+  {id:'importar',label:'Importar arquivo',short:'Importar',admin:true},
   {id:'cadastros',label:'Cadastros',short:'Cadastros',admin:true},
   {id:'historico',label:'Histórico',short:'Histórico',admin:true},
   {id:'usuarios',label:'Usuários',short:'Usuários',admin:true}
@@ -475,6 +475,7 @@ const LOADERS={
   perfis:async()=>{if(!isAdmin()){await loadMe();return;}const r=await fetchAll('perfis','*',['id']);const m={};r.forEach(x=>{m[x.id]=mapPerfil(x);});S.perfis=m;
     if(m[S.me.id]){S.perfil=m[S.me.id];S.me.name=S.perfil.nome;}},
   pre_aprovacoes:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('pre_aprovacoes').select('*').order('email'));S.pre=r;},
+  regras_importacao:async()=>{if(!isAdmin())return;try{const r=await sbq(S.sb.from('regras_importacao').select('*'));S.regras=Object.fromEntries(r.map(x=>[x.vendedor_id,x.destino]));}catch(e){S.regras={};}},
   municipios:async()=>{if(!isAdmin())return;const r=await fetchAll('municipios','uf,nome',['uf','nome']);const m={};r.forEach(x=>{(m[x.uf]=m[x.uf]||[]).push(x.nome);});
     Object.values(m).forEach(a=>a.sort(sortPt));S.mun=m;S.munMeta=r.length?{total:r.length,ufs:Object.keys(m).length}:null;}
 };
@@ -524,7 +525,7 @@ function startData(){
       if(isAdmin())reloadSoon('perfis');});
     S.channel.subscribe();}
   if(role()&&!S.dataStarted){S.dataStarted=true;
-    if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios'].forEach(t=>reload(t));}
+    if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios','regras_importacao'].forEach(t=>reload(t));}
     ['lojas','vendedores','periodos','lancamentos'].forEach(t=>reload(t));}
   render();
 }
@@ -711,6 +712,7 @@ document.addEventListener('click',e=>{
     loadEx:()=>{S.view='importar';analyzeCSV(EXEMPLO,'exemplo_vendas_setembro_2026.csv');},
     pickFile:()=>$('#csvfile')?.click(),
     impCancel:()=>{S.imp=null;render();},
+    relCancel:()=>{S.rel=null;render();},relConfirm:()=>commitRelatorio(),
     impConfirm:()=>commitImport(),
     impErrors:()=>downloadErrors(),
     newLoja:()=>formLoja(null),editLoja:()=>formLoja(d.id),delLoja:()=>delLoja(d.id),
@@ -742,6 +744,8 @@ document.addEventListener('change',e=>{
   if(t.matches('input.cell')){onCellChange(t);return;}
   if(t.matches('input.dias')){onDiasChange(t);return;}
   if(t.id==='csvfile'&&t.files[0]){readFile(t.files[0]);t.value='';return;}
+  if(t.dataset&&t.dataset.reldest&&S.rel){S.rel.destinos[t.dataset.reldest]=t.value;render();return;}
+  if(t.dataset&&t.dataset.rel&&S.rel){const k=t.dataset.rel;S.rel[k]=k==='lembrar'?t.checked:(k==='lojaId'?t.value:Number(t.value));if(k==='mes'||k==='ano'){const pp=S.periodos[pkey(S.rel.ano,S.rel.mes)];S.rel.dias=pp?pp.diasUteis:diasUteisMes(S.rel.ano,S.rel.mes);}render();return;}
   if(t.id==='munfile'&&t.files[0]){readMunFile(t.files[0]);t.value='';return;}
   if(t.name==='impmode'){S.imp.mode=t.value;render();return;}
   if(t.id==='impcreate'){S.imp.createMissing=t.checked;render();return;}
@@ -839,8 +843,8 @@ function viewDashboard(v){
   destroyCharts();
   if(!Object.keys(S.lanc).length){
     v.innerHTML=`<div class="empty"><h2 class="sec" style="justify-content:center">Nenhum lançamento ainda</h2>
-      <p>Importe o fechamento do mês por CSV ou digite os valores na tela de acompanhamento. Para conhecer o painel, carregue o exemplo com as lojas 12, 19 e 22 de setembro de 2026.</p>
-      ${canWrite()?`<button class="btn primary" data-act="goImport">Importar CSV</button> <button class="btn" data-act="loadEx">Ver exemplo na importação</button>`:'<span class="muted">Ainda não há lançamentos das lojas liberadas para você.</span>'}</div>`;return;}
+      <p>Importe o relatório de vendas do sistema (.xlsx) ou o modelo CSV, ou digite os valores na tela de acompanhamento. Para conhecer o painel, carregue o exemplo com as lojas 12, 19 e 22 de setembro de 2026.</p>
+      ${canWrite()?`<button class="btn primary" data-act="goImport">Importar arquivo</button> <button class="btn" data-act="loadEx">Ver exemplo na importação</button>`:'<span class="muted">Ainda não há lançamentos das lojas liberadas para você.</span>'}</div>`;return;}
   const rows=lancs();const T=agg(rows);const s=st(T.pct);const ano=S.f.ano,mes=S.f.mes;
   const dias=diasPeriodo(ano,mes);
   const byLoja=groupRows(rows,'loja');const lojasMeta=byLoja.filter(g=>g.c.meta>0);const lojasOk=lojasMeta.filter(g=>g.c.liq>=g.c.meta);
@@ -1118,7 +1122,7 @@ function drawAnualCharts(K,R){
 function viewAcomp(v){
   destroyCharts();
   const modeBar=`<div class="bar"><span class="seg" role="group" aria-label="Visualização">${[['loja','Por loja'],['regiao','Por região'],['uf','Por estado']].map(([k,l])=>`<button data-act="acompMode" data-v="${k}" aria-pressed="${S.acompMode===k}">${l}</button>`).join('')}</span><span class="grow"></span>
-    ${canWrite()?'<button class="btn small" data-act="goImport">Importar CSV</button>':''}</div>`;
+    ${canWrite()?'<button class="btn small" data-act="goImport">Importar arquivo</button>':''}</div>`;
   if(S.f.mes==='all'){v.innerHTML=modeBar+'<div class="empty"><p>Escolha um mês no filtro acima para ver a tabela de acompanhamento.</p></div>';return;}
   const ano=S.f.ano,mes=S.f.mes;
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id)&&(l.ativo!==false||Object.values(S.lanc).some(x=>x.lojaId===l.id&&x.ano===ano&&x.mes===mes))).sort((a,b)=>sortPt(a.id,b.id));
@@ -1225,6 +1229,132 @@ async function download(filename,data){
     const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);return true;}
   catch(e){toast('Não foi possível gerar o arquivo neste dispositivo.',true);return false;}
 }
+/* ============ Relatório do sistema (Vendas por Vendedores, .xlsx) ============ */
+async function lerXlsx(buf){
+  const dv=new DataView(buf);let e=buf.byteLength-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;
+  if(e<0)throw new Error('O arquivo não é uma planilha .xlsx válida.');
+  const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const z={};const td=new TextDecoder();
+  for(let i=0;i<n;i++){const comp=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lo=dv.getUint32(p+42,true);
+    const name=td.decode(new Uint8Array(buf,p+46,nl));const lnl=dv.getUint16(lo+26,true),lxl=dv.getUint16(lo+28,true);
+    z[name]={comp,data:new Uint8Array(buf,lo+30+lnl+lxl,csize)};p+=46+nl+xl+cl;}
+  const txt=async name=>{const x=z[name];if(!x)return null;if(x.comp===0)return td.decode(x.data);
+    if(typeof DecompressionStream==='undefined')throw new Error('Este navegador não abre .xlsx. Atualize o navegador ou use o Chrome.');
+    const s=new Blob([x.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return td.decode(await new Response(s).arrayBuffer());};
+  const xml=s=>new DOMParser().parseFromString(s,'application/xml');
+  const ss=[];const sst=await txt('xl/sharedStrings.xml');
+  if(sst)for(const si of xml(sst).getElementsByTagName('si'))ss.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
+  let sheet='xl/worksheets/sheet1.xml';
+  if(!z[sheet])sheet=Object.keys(z).filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort()[0];
+  if(!sheet)throw new Error('Nenhuma aba encontrada na planilha.');
+  const colIdx=ref=>{let c=0;for(const ch of ref.replace(/\d+/g,''))c=c*26+(ch.charCodeAt(0)-64);return c;};
+  const rows=[];
+  for(const r of xml(await txt(sheet)).getElementsByTagName('row')){const cells=[];
+    for(const c of r.getElementsByTagName('c')){const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0];let val=null;
+      if(t==='s'&&v)val=ss[Number(v.textContent)];
+      else if(t==='inlineStr')val=[...c.getElementsByTagName('t')].map(x=>x.textContent).join('');
+      else if(v)val=(t==='str'||t==='e'||t==='b')?v.textContent:Number(v.textContent);
+      if(val===null||val===undefined||(typeof val==='string'&&val.trim()===''))continue;
+      cells.push({col:colIdx(c.getAttribute('r')||'A1'),val});}
+    cells.sort((a,b)=>a.col-b.col);rows.push({r:Number(r.getAttribute('r')),cells});}
+  return rows;}
+const numCel=v=>{if(typeof v==='number')return isFinite(v)?v:null;const s=String(v).trim().replace(/R\$\s*/,'');
+  if(/^-?\d{1,3}(\.\d{3})*(,\d+)?$/.test(s)||/^-?\d+(,\d+)?$/.test(s))return Number(s.replace(/\./g,'').replace(',','.'));return null;};
+function titulo(s){const minus=new Set(['de','da','do','das','dos','e']);
+  return String(s).toLowerCase().split(/\s+/).filter(Boolean).map((w,i)=>i&&minus.has(w)?w:w.charAt(0).toUpperCase()+w.slice(1)).join(' ').replace(/\b(Ii|Iii|Iv)\b/g,m=>m.toUpperCase());}
+function parseRelatorio(rows){
+  const texto=rows.flatMap(r=>r.cells.filter(c=>typeof c.val==='string').map(c=>c.val)).join(' ');
+  let periodo=null;const m=texto.match(/Data Inicial:\s*(\d{2})\/(\d{2})\/(\d{4}).*?Data Final:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  if(m)periodo={ini:`${m[1]}/${m[2]}/${m[3]}`,fim:`${m[4]}/${m[5]}/${m[6]}`,mes:Number(m[2]),ano:Number(m[3]),mesFim:Number(m[5]),anoFim:Number(m[6])};
+  const linhas=[];let total=null;
+  for(const r of rows){const first=r.cells.find(c=>typeof c.val==='string');if(!first)continue;
+    const nums=r.cells.filter(c=>c.col>first.col).map(c=>numCel(c.val)).filter(x=>x!==null);
+    if(/^\s*total geral/i.test(first.val)){if(nums.length>=2)total={venda:nums[0],dev:Math.abs(nums[1]),liq:nums[2]??nums[0]-Math.abs(nums[1])};continue;}
+    const mm=String(first.val).trim().match(/^(.*\S)\s*-\s*(\d{2,})$/);if(!mm||nums.length<2)continue;
+    const venda=r2(nums[0]),dev=r2(Math.abs(nums[1])),liq=nums.length>2?r2(nums[2]):r2(venda-dev);
+    linhas.push({linha:r.r,id:mm[2],nomeOrig:mm[1].trim(),nome:titulo(mm[1].trim()),venda,dev,liq,difere:Math.abs(r2(venda-dev)-liq)>0.02});}
+  return{periodo,linhas,total};}
+function diasUteisMes(ano,mes){let n=0;const d=new Date(ano,mes-1,1);while(d.getMonth()===mes-1){const w=d.getDay();if(w&&w<6)n++;d.setDate(d.getDate()+1);}return n;}
+async function lerArquivoXlsx(file){
+  try{const rows=await lerXlsx(await file.arrayBuffer());
+    if(rows.some(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'))){analyzeCSV(gradeParaCSV(rows),file.name);return;}
+    const dados=parseRelatorio(rows);
+    if(!dados.linhas.length){toast('Não reconheci o layout desta planilha. Use o relatório "Vendas por Vendedores" do sistema ou o modelo do app.',true);return;}
+    const p=dados.periodo;const ano=p?p.ano:S.f.ano,mes=p?p.mes:(S.f.mes==='all'?now.getMonth()+1:S.f.mes);
+    const destinos={};dados.linhas.forEach(l=>{destinos[l.id]=(S.regras&&S.regras[l.id])||'vend';});
+    S.imp=null;S.rel={fileName:file.name,dados,lojaId:S.f.loja||'',ano,mes,dias:(S.periodos[pkey(ano,mes)]?.diasUteis)||diasUteisMes(ano,mes),destinos,lembrar:true,busy:false,result:null};render();
+  }catch(e){toast(e.message||'Não foi possível ler a planilha.',true);}}
+function gradeParaCSV(rows){const hi=rows.findIndex(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'));
+  const head=rows[hi].cells;const cols=head.map(c=>c.col);const q=s=>/[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  const fmt=v=>typeof v==='number'?(Number.isInteger(v)?String(v):String(r2(v)).replace('.',',')):q(String(v).trim());
+  const out=[head.map(c=>String(c.val).trim().toLowerCase()).join(';')];
+  rows.slice(hi+1).forEach(r=>{const m=new Map(r.cells.map(c=>[c.col,c.val]));if(!r.cells.length)return;
+    out.push(cols.map(c=>{const v=m.get(c);if(v===undefined)return '';const h=String(head[cols.indexOf(c)].val).trim().toLowerCase();
+      if(['ano','mes','dias_uteis'].includes(h))return typeof v==='number'?String(Math.round(v)):String(v).trim();
+      if(['meta_mensal','venda_real','venda_ideal','devolucoes'].includes(h)){const n=numCel(v);return n===null?String(v):String(r2(n).toFixed(2)).replace('.',',');}
+      return fmt(v);}).join(';'));});
+  return out.join('\r\n');}
+function relResumo(){const R=S.rel,L=R.dados.linhas;const vend=L.filter(l=>R.destinos[l.id]==='vend'),out=L.filter(l=>R.destinos[l.id]==='outros');
+  const soma=a=>a.reduce((s,l)=>({venda:s.venda+l.venda,dev:s.dev+l.dev}),{venda:0,dev:0});return{vend,out,sv:soma(vend),so:soma(out),sa:soma(L)};}
+function viewRelatorio(v){
+  const R=S.rel,D=R.dados;
+  if(R.result){const r=R.result;v.innerHTML=`<div class="box"><h3>Relatório importado</h3><p>${esc(R.fileName)}: ${r.vend} vendedores${r.outros?' e a linha Outros':''} gravados em ${esc(lojaNome(R.lojaId))}, ${MESES[R.mes-1]} de ${R.ano}.${r.novos?` ${r.novos} vendedores novos foram cadastrados.`:''}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-go="acomp">Ver acompanhamento</button><button class="btn" data-act="relCancel">Importar outro arquivo</button></div></div>`;return;}
+  const lojas=Object.values(S.lojas).sort((a,b)=>sortPt(a.id,b.id));const opt=(val,l,sel)=>`<option value="${esc(val)}" ${String(val)===String(sel)?'selected':''}>${esc(l)}</option>`;
+  const per=S.periodos[pkey(R.ano,R.mes)];const res=relResumo();
+  const tot=D.total;const confere=tot&&Math.abs(r2(res.sa.venda)-r2(tot.venda))<0.05&&Math.abs(r2(res.sa.dev)-r2(tot.dev))<0.05;
+  const p=D.periodo;const parcial=p&&(p.mesFim!==p.mes||p.anoFim!==p.ano);
+  v.innerHTML=`<div class="box">
+    <div class="bar" style="margin:0"><h3 style="margin:0">Relatório do sistema: ${esc(R.fileName)}</h3><span class="grow"></span><span class="muted">${D.linhas.length} vendedores no arquivo</span></div>
+    <p class="muted" style="margin:6px 0 12px">${p?`Período do relatório: ${p.ini} a ${p.fim}.`:'Este arquivo não informa o período; confira o mês e o ano abaixo.'} O relatório não traz a loja nem a meta: escolha a loja; as metas já lançadas no app são mantidas.</p>
+    ${parcial?'<div class="notice">O período do relatório abrange mais de um mês. O app guarda valores por mês: gere o relatório de um mês por vez.</div>':''}
+    <div class="bar ybar">
+      <label>Loja<select data-rel="lojaId"><option value="">Escolha a loja…</option>${lojas.map(l=>opt(l.id,`${l.nome} (${l.id})`,R.lojaId)).join('')}</select></label>
+      <label>Mês<select data-rel="mes">${MESES.map((m,i)=>opt(i+1,m[0].toUpperCase()+m.slice(1),R.mes)).join('')}</select></label>
+      <label>Ano<input class="inp" data-rel="ano" inputmode="numeric" value="${R.ano}" style="width:90px"></label>
+      <label>Dias úteis<input class="inp" data-rel="dias" inputmode="numeric" value="${R.dias}" style="width:80px"></label>
+    </div>
+    <p class="fhint" style="margin:-6px 0 10px">${per?`Dias úteis já cadastrados para ${MESES[R.mes-1]}/${R.ano}: ${per.diasUteis}. Se mudar aqui, o cadastro é atualizado.`:'Sugestão: dias de segunda a sexta do mês. Desconte feriados, se houver.'}</p>
+    ${!lojas.length?'<div class="notice">Nenhuma loja cadastrada. Cadastre a loja em Cadastros antes de importar.</div>':''}
+    <div class="counts"><div><b>${res.vend.length}</b><span>vendedores</span></div><div><b>${res.out.length}</b><span>linhas somadas em Outros</span></div><div><b>${D.linhas.length-res.vend.length-res.out.length}</b><span>ignoradas</span></div><div><b class="${tot?(confere?'pos':'neg'):''}">${tot?(confere?'Confere':'Diferente'):'—'}</b><span>${tot?'soma × Total Geral':'sem Total Geral'}</span></div></div>
+    <label class="ck" style="margin-bottom:8px"><input type="checkbox" data-rel="lembrar" ${R.lembrar?'checked':''}> Lembrar as escolhas "Outros" e "Ignorar" para os próximos relatórios</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="relConfirm" ${R.busy||!R.lojaId?'disabled':''}>${R.busy?'Importando…':'Confirmar importação'}</button><button class="btn" data-act="relCancel" ${R.busy?'disabled':''}>Cancelar</button></div>
+    ${!R.lojaId?'<p class="fhint">Escolha a loja para liberar a confirmação.</p>':''}
+  </div>
+  <h2 class="sec">Vendedores do relatório</h2>
+  <div class="tw"><table class="t"><thead><tr><th>Código</th><th>Nome no relatório</th><th>Cadastro no app</th><th class="r">Venda</th><th class="r">Devoluções</th><th class="r">Venda líquida</th><th>Lançar como</th></tr></thead><tbody>
+  ${D.linhas.map(l=>{const c=S.vendedores[l.id];const dst=R.destinos[l.id];const cad=dst==='outros'?'<span class="muted">Somado na linha Outros</span>':dst==='ignorar'?'<span class="muted">Não será lançado</span>':c?(R.lojaId&&c.lojaId!==R.lojaId?`${esc(c.nome)} <span class="vsub">cadastrado em ${esc(lojaNome(c.lojaId))}</span>`:esc(c.nome)):`<span class="rowst criar">Novo: ${esc(l.nome)}</span>`;
+    return `<tr><td class="num">${esc(l.id)}</td><td>${esc(l.nomeOrig)}${l.difere?'<span class="vsub" style="color:var(--below)">Líquida diferente de venda menos devoluções</span>':''}</td><td>${cad}</td><td class="r">${fmtBRL(l.venda)}</td><td class="r">${fmtBRL(l.dev)}</td><td class="r">${fmtSigned(l.liq)}</td>
+    <td><select data-reldest="${esc(l.id)}">${[['vend','Vendedor'],['outros','Outros'],['ignorar','Ignorar']].map(([k,t])=>opt(k,t,R.destinos[l.id])).join('')}</select></td></tr>`;}).join('')}
+  </tbody><tfoot><tr><td></td><td>Soma do arquivo</td><td></td><td class="r">${fmtBRL(res.sa.venda)}</td><td class="r">${fmtBRL(res.sa.dev)}</td><td class="r">${fmtSigned(res.sa.venda-res.sa.dev)}</td><td></td></tr>
+  ${tot?`<tr><td></td><td>Total Geral do relatório</td><td></td><td class="r">${fmtBRL(tot.venda)}</td><td class="r">${fmtBRL(tot.dev)}</td><td class="r">${fmtSigned(tot.liq)}</td><td></td></tr>`:''}</tfoot></table></div>
+  <p class="muted" style="font-size:13px">Use "Outros" para usuários que não são vendedores (por exemplo, assistentes e analistas): os valores entram somados na linha Outros da loja. Reimportar o mesmo mês substitui a venda e as devoluções, sem somar de novo.</p>`;
+}
+async function commitRelatorio(){
+  const R=S.rel;if(!R||R.busy||!isAdmin())return;
+  const ano=Number(R.ano),mes=Number(R.mes),dias=Number(R.dias);
+  if(!R.lojaId||!S.lojas[R.lojaId])return toast('Escolha a loja.',true);
+  if(!Number.isInteger(ano)||ano<2000||ano>2100)return toast('Ano inválido.',true);
+  if(!Number.isInteger(dias)||dias<1||dias>31)return toast('Dias úteis deve ser um inteiro de 1 a 31.',true);
+  R.busy=true;render();const ts=Date.now();const res=relResumo();
+  try{
+    const pk=pkey(ano,mes);if(!S.periodos[pk]||S.periodos[pk].diasUteis!==dias)await upsertMany('periodos',[toRow('periodos',{ano,mes,diasUteis:dias})]);
+    const novos=res.vend.filter(l=>!S.vendedores[l.id]);
+    if(novos.length)await upsertMany('vendedores',novos.map(l=>toRow('vendedores',{id:l.id,nome:l.nome,lojaId:R.lojaId,ativo:true})));
+    const base=vid=>{const k=lkey(ano,mes,R.lojaId,vid);const x=S.lanc[k];return x?{meta:x.meta,vendaIdeal:x.vendaIdeal}:{meta:0,vendaIdeal:null};};
+    const rows=res.vend.map(l=>toRow('lancamentos',{ano,mes,lojaId:R.lojaId,vendedorId:l.id,...base(l.id),vendaReal:l.venda,devolucoes:l.dev,atualizadoEm:ts,origem:'relatorio'}));
+    if(res.out.length)rows.push(toRow('lancamentos',{ano,mes,lojaId:R.lojaId,vendedorId:OUT,...base(OUT),vendaReal:r2(res.so.venda),devolucoes:r2(res.so.dev),atualizadoEm:ts,origem:'relatorio'}));
+    if(rows.length)await upsertMany('lancamentos',rows);
+    if(R.lembrar){try{const set=R.dados.linhas.filter(l=>R.destinos[l.id]!=='vend').map(l=>({vendedor_id:l.id,destino:R.destinos[l.id]}));
+        const del=R.dados.linhas.filter(l=>R.destinos[l.id]==='vend'&&S.regras&&S.regras[l.id]).map(l=>l.id);
+        if(set.length)await sbq(S.sb.from('regras_importacao').upsert(set,{onConflict:'vendedor_id'}));
+        if(del.length)await sbq(S.sb.from('regras_importacao').delete().in('vendedor_id',del));reloadSoon('regras_importacao',0);}
+      catch(e){toast('Os valores foram importados, mas as escolhas não puderam ser lembradas. Execute a atualizacao_02.sql no Supabase.',true);}}
+    logHist('Importação',`Relatório ${R.fileName} em ${lojaNome(R.lojaId)}, ${pad2(mes)}/${ano}: ${res.vend.length} vendedores${res.out.length?`, ${res.out.length} linhas em Outros`:''}${novos.length?`; cadastrou ${novos.length} vendedores`:''}`);
+    R.busy=false;R.result={vend:res.vend.length,outros:res.out.length>0,novos:novos.length};S.f.ano=ano;S.f.mes=mes;S.f.loja=R.lojaId;S.f.regiao='';S.f.uf='';S.f.cidade='';S.f.vend='';
+    await Promise.all(['vendedores','periodos','lancamentos'].map(t=>reload(t)));toast('Relatório importado.');render();
+  }catch(e){R.busy=false;toast(dbErr(e)+' Importar de novo é seguro: os valores são substituídos.',true);render();}
+}
+
 /* ============ Importação CSV ============ */
 const EXEMPLO=[COLS.join(';'),
 '22;Loja 22;Sul;PR;Curitiba;V001;Ruan;2026;9;23;200000,00;217583,40;200000,00;15201,96',
@@ -1250,7 +1380,9 @@ const GUIDE=[
  ['venda_ideal','Não','Se ficar vazio, a venda ideal acompanha a meta mensal.','200000,00'],
  ['devolucoes','Sim','Devoluções acumuladas no mês.','15201,96']];
 function readFile(file){
-  if(!/\.(csv|txt)$/i.test(file.name)){toast('Escolha um arquivo .csv.',true);return;}
+  if(/\.xlsx$/i.test(file.name)){lerArquivoXlsx(file);return;}
+  if(/\.xls$/i.test(file.name)){toast('Arquivos .xls antigos não são lidos. No Excel, use Salvar como > Pasta de Trabalho do Excel (.xlsx).',true);return;}
+  if(!/\.(csv|txt)$/i.test(file.name)){toast('Escolha um arquivo .xlsx ou .csv.',true);return;}
   const rd=new FileReader();rd.onload=()=>{const buf=rd.result;let text,warn=null;
     try{text=new TextDecoder('utf-8',{fatal:true}).decode(buf);}catch{text=new TextDecoder('windows-1252').decode(buf);warn='O arquivo não está em UTF-8. Ele foi lido como Windows-1252; confira acentos na prévia e, da próxima vez, salve como "CSV UTF-8".';}
     analyzeCSV(text,file.name,warn);};rd.readAsArrayBuffer(file);
@@ -1317,13 +1449,13 @@ function classify(){const imp=S.imp;const out={criar:0,atualizar:0,ignorar:0,rej
   return out;}
 const ST_LABEL={criar:'Criar',atualizar:'Atualizar',ignorar:'Ignorar',rejeitar:'Rejeitar'};
 function viewImport(v){
-  destroyCharts();const ed=canWrite();const imp=S.imp;
+  destroyCharts();if(S.rel){viewRelatorio(v);return;}const ed=canWrite();const imp=S.imp;
   const guide=`<div class="box"><h3>Como preencher</h3><p class="muted" style="margin-top:0">Arquivo em UTF-8, colunas separadas por ponto e vírgula e vírgula decimal. Valores sem "R$" e sem separador de milhares. Os indicadores (percentuais, total líquido, status e meta diária) são calculados pelo sistema e não precisam estar no arquivo.</p>
     <div class="tw"><table class="t guide"><thead><tr><th>Coluna</th><th>Obrigatória</th><th>Orientação</th><th>Exemplo</th></tr></thead><tbody>${GUIDE.map(g=>`<tr><td><code>${g[0]}</code></td><td>${g[1]}</td><td>${g[2]}</td><td><code>${g[3]}</code></td></tr>`).join('')}</tbody></table></div>
     <p class="muted" style="margin-bottom:0">Os valores do arquivo são o acumulado do mês. Ao reimportar o mesmo vendedor, loja, mês e ano, os valores anteriores são substituídos, sem somar de novo.</p></div>`;
   const pick=`<div class="box"><h3>Modelos</h3><p class="muted" style="margin-top:0">Baixe o modelo, preencha no Excel ou Google Planilhas e salve como "CSV UTF-8 (delimitado por ponto e vírgula)".</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="tplEmpty">Baixar modelo CSV</button><button class="btn" data-act="tplEx">Baixar exemplo preenchido</button></div>
-    ${ed?`<h3 style="margin-top:22px">Importar CSV</h3><div class="drop" id="drop" data-act="pickFile" tabindex="0" role="button">Arraste o arquivo aqui ou <b>escolha um arquivo</b><br><span class="muted" style="font-size:13px">Você verá uma prévia antes de confirmar.</span></div><input type="file" id="csvfile" accept=".csv,text/csv" hidden>
+    ${ed?`<h3 style="margin-top:22px">Importar arquivo</h3><p class="muted" style="margin-top:0">Aceita o relatório <b>Vendas por Vendedores (.xlsx)</b> do sistema, exatamente como ele sai, e também o modelo do app em .csv ou .xlsx.</p><div class="drop" id="drop" data-act="pickFile" tabindex="0" role="button">Arraste o arquivo aqui ou <b>escolha um arquivo</b><br><span class="muted" style="font-size:13px">Você verá uma prévia antes de confirmar.</span></div><input type="file" id="csvfile" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <p style="margin:12px 0 0"><button class="link" data-act="loadEx">Testar com o exemplo de setembro de 2026</button></p>`:'<p class="notice" style="margin-top:16px">Seu perfil é de consulta. A importação está disponível para gestores e administradores.</p>'}</div>`;
   if(!imp){v.innerHTML=`<div class="imp-grid">${pick}${guide}</div>`;bindDrop();return;}
   if(imp.result){const r=imp.result;v.innerHTML=`<div class="box"><h3>Importação concluída</h3><p>${esc(imp.fileName)}: ${r.criar} criados, ${r.atualizar} atualizados, ${r.ignorar} ignorados e ${r.rejeitar} rejeitados.${r.lojas||r.vends?` Cadastrados ${r.lojas} lojas e ${r.vends} vendedores.`:''}${r.falhas?` ${r.falhas} registros não puderam ser gravados; tente importar novamente.`:''}</p>
