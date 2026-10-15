@@ -437,14 +437,18 @@ function toRow(col,d){switch(col){
   case 'vendedores':return{id:d.id,nome:d.nome,loja_id:d.lojaId,ativo:d.ativo!==false};
   case 'periodos':return{ano:d.ano,mes:d.mes,dias_uteis:d.diasUteis};
   case 'lancamentos':return{ano:d.ano,mes:d.mes,loja_id:d.lojaId,vendedor_id:d.vendedorId,meta:r2(d.meta),venda_real:r2(d.vendaReal),
-    venda_ideal:d.vendaIdeal==null?null:r2(d.vendaIdeal),devolucoes:r2(d.devolucoes),atualizado_em:iso(d.atualizadoEm)||new Date().toISOString(),atualizado_por:S.me.id,origem:d.origem||'manual'};}
+    venda_ideal:d.vendaIdeal==null?null:r2(d.vendaIdeal),devolucoes:r2(d.devolucoes),atualizado_em:iso(d.atualizadoEm)||new Date().toISOString(),origem:d.origem||'manual'};}
   return d;}
-function setDoc(col,_id,d){return sbq(S.sb.from(col).upsert(toRow(col,d),{onConflict:PK[col]})).finally(()=>reloadSoon(col));}
-function delDoc(col,id){let q=S.sb.from(col).delete();
-  if(col==='periodos'){const [a,m]=String(id).split('-');q=q.eq('ano',Number(a)).eq('mes',Number(m));}else q=q.eq('id',id);
+/* Toda leitura e gravação passa por funções do servidor (atualizacao_03_servidor.sql).
+   O navegador não acessa nenhuma tabela diretamente. */
+const salvar=(col,linhas)=>sbq(S.sb.rpc('salvar_'+col,{p_linhas:linhas}));
+function setDoc(col,_id,d){return salvar(col,[toRow(col,d)]).finally(()=>reloadSoon(col));}
+function delDoc(col,id){let q;
+  if(col==='periodos'){const [a,m]=String(id).split('-');q=S.sb.rpc('excluir_periodo',{p_ano:Number(a),p_mes:Number(m)});}
+  else q=S.sb.rpc(col==='lojas'?'excluir_loja':'excluir_vendedor',{p_id:String(id)});
   return sbq(q).finally(()=>reloadSoon(col));}
 async function upsertMany(col,rows,{ignore=false,onProgress}={}){
-  try{for(let i=0;i<rows.length;i+=500){await sbq(S.sb.from(col).upsert(rows.slice(i,i+500),{onConflict:PK[col],ignoreDuplicates:ignore}));onProgress&&onProgress(Math.min(rows.length,i+500));}}
+  try{for(let i=0;i<rows.length;i+=500){await salvar(col,rows.slice(i,i+500));onProgress&&onProgress(Math.min(rows.length,i+500));}}
   finally{reloadSoon(col);}}
 function dbErr(e){const c=e&&e.code;const m=(e&&e.message)||'';
   if(c==='23503')return 'Existem registros vinculados (vendedores ou lançamentos). Marque como inativo em vez de excluir.';
@@ -454,11 +458,11 @@ function dbErr(e){const c=e&&e.code;const m=(e&&e.message)||'';
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'Sem conexão com o servidor. Verifique a internet e tente de novo.';
   return 'Não foi possível salvar. '+m;}
 function logHist(tipo,descricao,detalhes){if(!S.sb||!isAdmin())return;
-  S.sb.from('historico').insert({tipo,descricao,detalhes:detalhes||null}).then(({error})=>{if(!error)reloadSoon('historico');});}
+  S.sb.rpc('registrar_historico',{p_tipo:tipo,p_descricao:descricao,p_detalhes:detalhes||null}).then(({error})=>{if(!error)reloadSoon('historico');});}
 
 /* ============ Carga de dados ============ */
 async function fetchAll(table,cols,order){const out=[];
-  for(let from=0;;from+=1000){let q=S.sb.from(table).select(cols);order.forEach(o=>{q=q.order(o);});
+  for(let from=0;;from+=1000){let q=S.sb.rpc('ler_'+table).select(cols);order.forEach(o=>{q=q.order(o);});
     const d=await sbq(q.range(from,from+999));out.push(...d);if(d.length<1000)break;}
   return out;}
 const mapPerfil=x=>x?{id:x.id,nome:x.nome||'',email:x.email||'',mensagem:x.mensagem||'',lojasSolicitadas:x.lojas_solicitadas||[],status:x.status,perfil:x.perfil,regioes:x.regioes||[],lojas:x.lojas||[],
@@ -470,12 +474,12 @@ const LOADERS={
   lancamentos:async()=>{const r=await fetchAll('lancamentos','*',['ano','mes','loja_id','vendedor_id']);const m={};
     r.forEach(x=>{const k=lkey(x.ano,x.mes,x.loja_id,x.vendedor_id);m[k]={ano:x.ano,mes:x.mes,lojaId:x.loja_id,vendedorId:x.vendedor_id,meta:Number(x.meta),vendaReal:Number(x.venda_real),
       vendaIdeal:x.venda_ideal==null?null:Number(x.venda_ideal),devolucoes:Number(x.devolucoes),atualizadoEm:Date.parse(x.atualizado_em),atualizadoPor:x.atualizado_por,origem:x.origem,_id:k};});S.lanc=m;},
-  historico:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('historico').select('*').order('em',{ascending:false}).limit(1000));
+  historico:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.rpc('ler_historico').select('*').order('em',{ascending:false}).limit(1000));
     S.hist=r.map(x=>({em:Date.parse(x.em),tipo:x.tipo,descricao:x.descricao,usuario:x.usuario}));},
   perfis:async()=>{if(!isAdmin()){await loadMe();return;}const r=await fetchAll('perfis','*',['id']);const m={};r.forEach(x=>{m[x.id]=mapPerfil(x);});S.perfis=m;
     if(m[S.me.id]){S.perfil=m[S.me.id];S.me.name=S.perfil.nome;}},
-  pre_aprovacoes:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('pre_aprovacoes').select('*').order('email'));S.pre=r;},
-  regras_importacao:async()=>{if(!isAdmin())return;try{const r=await sbq(S.sb.from('regras_importacao').select('*'));S.regras=Object.fromEntries(r.map(x=>[x.vendedor_id,x.destino]));}catch(e){S.regras={};}},
+  pre_aprovacoes:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.rpc('ler_pre_aprovacoes').select('*').order('email'));S.pre=r;},
+  regras_importacao:async()=>{if(!isAdmin())return;try{const r=await sbq(S.sb.rpc('ler_regras_importacao').select('*'));S.regras=Object.fromEntries(r.map(x=>[x.vendedor_id,x.destino]));}catch(e){S.regras={};}},
   municipios:async()=>{if(!isAdmin())return;const r=await fetchAll('municipios','uf,nome',['uf','nome']);const m={};r.forEach(x=>{(m[x.uf]=m[x.uf]||[]).push(x.nome);});
     Object.values(m).forEach(a=>a.sort(sortPt));S.mun=m;S.munMeta=r.length?{total:r.length,ufs:Object.keys(m).length}:null;}
 };
@@ -516,13 +520,13 @@ async function handleSession(session){
   try{await loadMe();}catch(e){S.meErr=dbErr(e);}
   S.meLoaded=true;startData();
 }
-async function loadMe(){const d=await sbq(S.sb.from('perfis').select('*').eq('id',S.me.id).maybeSingle());S.perfil=mapPerfil(d);S.me.name=S.perfil?.nome||'';}
+async function loadMe(){const d=await sbq(S.sb.rpc('ler_meu_perfil').select('*').maybeSingle());S.perfil=mapPerfil(d);S.me.name=S.perfil?.nome||'';}
 function startData(){
   if(!S.channel){S.channel=S.sb.channel('dados-'+S.me.id);
-    ['lojas','vendedores','periodos','lancamentos'].forEach(t=>S.channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{if(role())reloadSoon(t);}));
-    S.channel.on('postgres_changes',{event:'*',schema:'public',table:'perfis'},p=>{
-      if((p.new&&p.new.id===S.me.id)||(p.old&&p.old.id===S.me.id)){loadMe().then(()=>{if(role()&&!S.dataStarted)startData();else if(!role()){S.dataStarted=false;}schedule();});}
-      if(isAdmin())reloadSoon('perfis');});
+    // A tabela "sinais" só avisa QUAL tabela mudou; os dados vêm de novo pelas funções do servidor.
+    S.channel.on('postgres_changes',{event:'*',schema:'public',table:'sinais'},p=>{const t=p.new&&p.new.tabela;if(!t)return;
+      if(t==='perfis'){loadMe().then(()=>{if(role()&&!S.dataStarted)startData();else if(!role()){S.dataStarted=false;}schedule();});if(isAdmin())reloadSoon('perfis');return;}
+      if(role())reloadSoon(t);});
     S.channel.subscribe();}
   if(role()&&!S.dataStarted){S.dataStarted=true;
     if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios','regras_importacao'].forEach(t=>reload(t));}
@@ -1347,9 +1351,8 @@ async function commitRelatorio(){
     if(rows.length)await upsertMany('lancamentos',rows);
     if(R.lembrar){try{const set=R.dados.linhas.filter(l=>R.destinos[l.id]!=='vend').map(l=>({vendedor_id:l.id,destino:R.destinos[l.id]}));
         const del=R.dados.linhas.filter(l=>R.destinos[l.id]==='vend'&&S.regras&&S.regras[l.id]).map(l=>l.id);
-        if(set.length)await sbq(S.sb.from('regras_importacao').upsert(set,{onConflict:'vendedor_id'}));
-        if(del.length)await sbq(S.sb.from('regras_importacao').delete().in('vendedor_id',del));reloadSoon('regras_importacao',0);}
-      catch(e){toast('Os valores foram importados, mas as escolhas não puderam ser lembradas. Execute a atualizacao_02.sql no Supabase.',true);}}
+        if(set.length||del.length)await sbq(S.sb.rpc('salvar_regras_importacao',{p_set:set,p_del:del}));reloadSoon('regras_importacao',0);}
+      catch(e){toast('Os valores foram importados, mas as escolhas não puderam ser lembradas. Execute a atualizacao_03_servidor.sql no Supabase.',true);}}
     logHist('Importação',`Relatório ${R.fileName} em ${lojaNome(R.lojaId)}, ${pad2(mes)}/${ano}: ${res.vend.length} vendedores${res.out.length?`, ${res.out.length} linhas em Outros`:''}${novos.length?`; cadastrou ${novos.length} vendedores`:''}`);
     R.busy=false;R.result={vend:res.vend.length,outros:res.out.length>0,novos:novos.length};S.f.ano=ano;S.f.mes=mes;S.f.loja=R.lojaId;S.f.regiao='';S.f.uf='';S.f.cidade='';S.f.vend='';
     await Promise.all(['vendedores','periodos','lancamentos'].map(t=>reload(t)));toast('Relatório importado.');render();
@@ -1724,17 +1727,16 @@ function formAcesso(uid,{pre=false}={}){
     try{
       if(pre){const email=st.email.trim().toLowerCase();if(!emailOk(email)){err.textContent='Informe um e-mail válido.';return;}
         const ja=Object.values(S.perfis).find(p=>p.email===email);if(ja){err.textContent='Este e-mail já tem cadastro. Use Editar acesso na lista de usuários.';return;}
-        await sbq(S.sb.from('pre_aprovacoes').upsert({email,nome:st.nome.trim(),perfil:st.perfil,regioes,lojas},{onConflict:'email'}));
+        await sbq(S.sb.rpc('pre_aprovar',{p_email:email,p_nome:st.nome.trim(),p_perfil:st.perfil,p_regioes:regioes,p_lojas:lojas}));
         logHist('Usuário',`Pré-aprovou ${email} como ${PERFIL_LABEL[st.perfil]}: ${acessoTxt({perfil:st.perfil,regioes,lojas})}`);reloadSoon('pre_aprovacoes',0);closeModal();toast('E-mail pré-aprovado.');return;}
-      const now_=new Date().toISOString();
-      await sbq(S.sb.from('perfis').update({perfil:st.perfil,regioes,lojas,status:'aprovado',decidido_em:now_,decidido_por:S.me.id,aprovado_em:u.status==='aprovado'&&u.aprovadoEm?iso(u.aprovadoEm):now_}).eq('id',uid));
+      await sbq(S.sb.rpc('atualizar_acesso',{p_id:uid,p_perfil:st.perfil,p_regioes:regioes,p_lojas:lojas}));
       logHist('Usuário',`${u.status==='aprovado'?'Alterou o acesso de':'Aprovou'} ${u.nome} (${u.email}) como ${PERFIL_LABEL[st.perfil]}: ${acessoTxt({perfil:st.perfil,regioes,lojas})}`);
       reloadSoon('perfis',0);closeModal();toast(u.status==='aprovado'?'Acesso atualizado.':'Acesso aprovado.');}catch(e){err.textContent=dbErr(e);}};
 }
 async function setStatus(uid,status,verbo,msg){const u=S.perfis[uid]||{};
-  try{await sbq(S.sb.from('perfis').update({status,decidido_em:new Date().toISOString(),decidido_por:S.me.id}).eq('id',uid));
+  try{await sbq(S.sb.rpc('definir_status',{p_id:uid,p_status:status}));
     logHist('Usuário',`${verbo} ${u.nome} (${u.email})`);toast(msg);reloadSoon('perfis',0);}catch(e){toast(dbErr(e),true);}}
-async function preDel(email){try{await sbq(S.sb.from('pre_aprovacoes').delete().eq('email',email));logHist('Usuário',`Removeu a pré-aprovação de ${email}`);reloadSoon('pre_aprovacoes',0);}catch(e){toast(dbErr(e),true);}}
+async function preDel(email){try{await sbq(S.sb.rpc('remover_pre_aprovacao',{p_email:email}));logHist('Usuário',`Removeu a pré-aprovação de ${email}`);reloadSoon('pre_aprovacoes',0);}catch(e){toast(dbErr(e),true);}}
 
 /* ============ Backup e restauração ============ */
 async function backupCompleto(){
@@ -1763,8 +1765,8 @@ async function restaurar(b,us){
     await upsertMany('lancamentos',b.lancamentos.map(x=>toRow('lancamentos',{...x,origem:'backup'})));
     const mun=[];Object.entries(b.municipios||{}).forEach(([uf,ns])=>(ns||[]).forEach(n=>mun.push({uf,nome:n})));if(mun.length)await upsertMany('municipios',mun,{ignore:true});
     let pre=0,dir=0;for(const u of us){const email=u.email.toLowerCase();const p=Object.values(S.perfis).find(x=>x.email===email);
-      if(p){if(p.id!==S.me.id){await sbq(S.sb.from('perfis').update({perfil:u.perfil,regioes:u.regioes||[],lojas:u.lojas||[],status:'aprovado',decidido_em:new Date().toISOString(),decidido_por:S.me.id,aprovado_em:new Date().toISOString()}).eq('id',p.id));dir++;}}
-      else{await sbq(S.sb.from('pre_aprovacoes').upsert({email,nome:u.nome||'',perfil:u.perfil,regioes:u.regioes||[],lojas:u.lojas||[]},{onConflict:'email'}));pre++;}}
+      if(p){if(p.id!==S.me.id){await sbq(S.sb.rpc('atualizar_acesso',{p_id:p.id,p_perfil:u.perfil,p_regioes:u.regioes||[],p_lojas:u.lojas||[]}));dir++;}}
+      else{await sbq(S.sb.rpc('pre_aprovar',{p_email:email,p_nome:u.nome||'',p_perfil:u.perfil,p_regioes:u.regioes||[],p_lojas:u.lojas||[]}));pre++;}}
     S.imp=null;logHist('Cadastro',`Restaurou backup: ${lojas.size} lojas, ${b.lancamentos.length} lançamentos, ${pre} e-mails pré-aprovados, ${dir} acessos atualizados`);
     ['lojas','vendedores','periodos','lancamentos','municipios','perfis','pre_aprovacoes'].forEach(t=>reload(t));toast('Backup restaurado.');}
   catch(e){S.imp=null;toast(dbErr(e)+' Você pode restaurar de novo: registros já gravados serão apenas substituídos.',true);['lojas','vendedores','periodos','lancamentos'].forEach(t=>reload(t));}}

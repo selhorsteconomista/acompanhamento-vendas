@@ -1,6 +1,6 @@
 // Service worker: guarda a "casca" do app para abrir rápido e instalar como aplicativo.
 // Os dados de vendas sempre vêm do Supabase e nunca ficam neste cache.
-const CACHE = 'vendas-v1';
+const CACHE = 'vendas-v2';
 const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'favicon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
