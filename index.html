@@ -1127,19 +1127,19 @@ function drawAnualCharts(K,R){
 /* ============ Acompanhamento ============ */
 function viewAcomp(v){
   destroyCharts();
-  const modeBar=`<div class="bar"><span class="seg" role="group" aria-label="Visualização">${[['loja','Por loja'],['regiao','Por região'],['uf','Por estado']].map(([k,l])=>`<button data-act="acompMode" data-v="${k}" aria-pressed="${S.acompMode===k}">${l}</button>`).join('')}</span><span class="grow"></span>
+  const modeBar=`<div class="bar"><span class="seg" role="group" aria-label="Visualização">${[['loja','Por loja'],['regiao','Por região'],['uf','Por estado'],['gestor','Por gestor']].map(([k,l])=>`<button data-act="acompMode" data-v="${k}" aria-pressed="${S.acompMode===k}">${l}</button>`).join('')}</span><span class="grow"></span>
     ${canWrite()?'<button class="btn small" data-act="goImport">Importar arquivo</button>':''}</div>`;
   if(S.f.mes==='all'){v.innerHTML=modeBar+'<div class="empty"><p>Escolha um mês no filtro acima para ver a tabela de acompanhamento.</p></div>';return;}
   const ano=S.f.ano,mes=S.f.mes;
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id)&&(l.ativo!==false||Object.values(S.lanc).some(x=>x.lojaId===l.id&&x.ano===ano&&x.mes===mes))).sort((a,b)=>sortPt(a.id,b.id));
   const orphan=[...new Set(Object.values(S.lanc).filter(x=>x.ano===ano&&x.mes===mes&&!S.lojas[x.lojaId]&&!S.f.regiao&&!S.f.uf&&!S.f.cidade&&(!S.f.loja||S.f.loja===x.lojaId)).map(x=>x.lojaId))];
   if(!lojas.length&&!orphan.length){v.innerHTML=modeBar+`<div class="empty"><p>Nenhuma loja cadastrada${S.f.regiao||S.f.uf||S.f.cidade?' para os filtros escolhidos':''}.</p>${canWrite()?'<button class="btn primary" data-act="goCad" data-v="lojas">Cadastrar loja</button>':''}</div>`;return;}
-  if(S.acompMode==='regiao'||S.acompMode==='uf'){v.innerHTML=modeBar+regionSheets(ano,mes,S.acompMode);return;}
+  if(S.acompMode==='regiao'||S.acompMode==='uf'||S.acompMode==='gestor'){v.innerHTML=modeBar+regionSheets(ano,mes,S.acompMode);return;}
   v.innerHTML=modeBar+lojas.map(l=>sheetHTML(l.id,ano,mes)).join('')+orphan.map(id=>sheetHTML(id,ano,mes)).join('');
 }
 function regionSheets(ano,mes,by='regiao'){
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id));
-  const gk=l=>by==='uf'?(l.uf||'(sem estado)'):(l.regiao||'(sem região)');const gl=k=>by==='uf'?(ufLabel(k)||k):k;
+  const gk=l=>by==='uf'?(l.uf||'(sem estado)'):by==='gestor'?(l.gestor||'(sem gestor)'):(l.regiao||'(sem região)');const gl=k=>by==='uf'?(ufLabel(k)||k):by==='gestor'?(k==='(sem gestor)'?'Lojas sem gestor':'Gestor '+k):k;
   const regs=[...new Set(lojas.map(gk))].sort((a,b)=>sortPt(gl(a),gl(b)));
   const dias=diasPeriodo(ano,mes);
   return regs.map(rg=>{
@@ -1158,7 +1158,7 @@ function regionSheets(ano,mes,by='regiao'){
       <tr class="md"><td>Meta diária</td><td>${dias?fmtBRL(T.meta/dias):'—'}</td><td colspan="7"></td></tr></tbody></table></div>
       <div style="padding:14px 16px"><h3 style="margin:0 0 8px;font:600 16px var(--f-num)">Total líquido comparado a ${MESES[mes-1]} de ${ano-1}</h3>
       <div class="tw"><table class="t"><thead><tr><th>Loja</th><th class="r">${ano}</th><th class="r">${ano-1}</th><th class="r">Diferença</th><th class="r">Variação</th></tr></thead><tbody>${yoyRows}</tbody>
-      <tfoot><tr><td>${by==='uf'?'Estado':'Região'}</td><td class="r">${fmtSigned(T.liq)}</td><td class="r">${prevAll.length?fmtSigned(PT.liq):'—'}</td><td class="r">${prevAll.length?fmtSigned(pd):'—'}</td><td class="r">${pp==null?'—':`<span class="badge ${pp<0?'below':'over'}">${fmtPct(pp)}</span>`}</td></tr></tfoot></table></div></div></section>`;
+      <tfoot><tr><td>${by==='uf'?'Estado':by==='gestor'?'Gestor':'Região'}</td><td class="r">${fmtSigned(T.liq)}</td><td class="r">${prevAll.length?fmtSigned(PT.liq):'—'}</td><td class="r">${prevAll.length?fmtSigned(pd):'—'}</td><td class="r">${pp==null?'—':`<span class="badge ${pp<0?'below':'over'}">${fmtPct(pp)}</span>`}</td></tr></tfoot></table></div></div></section>`;
   }).join('');
 }
 
