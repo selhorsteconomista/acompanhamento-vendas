@@ -438,7 +438,7 @@ const PK={lojas:'id',vendedores:'id',periodos:'ano,mes',lancamentos:'ano,mes,loj
 const iso=ms=>ms?new Date(ms).toISOString():null;
 async function sbq(p){const {data,error}=await p;if(error)throw error;return data;}
 function toRow(col,d){switch(col){
-  case 'lojas':return{id:d.id,nome:d.nome,regiao:d.regiao||'',uf:d.uf||'',cidade:d.cidade||'',ativo:d.ativo!==false};
+  case 'lojas':return{id:d.id,nome:d.nome,regiao:d.regiao||'',uf:d.uf||'',cidade:d.cidade||'',gestor:d.gestor||'',ativo:d.ativo!==false};
   case 'vendedores':return{id:d.id,nome:d.nome,loja_id:d.lojaId,ativo:d.ativo!==false};
   case 'periodos':return{ano:d.ano,mes:d.mes,dias_uteis:d.diasUteis};
   case 'lancamentos':return{ano:d.ano,mes:d.mes,loja_id:d.lojaId,vendedor_id:d.vendedorId,meta:r2(d.meta),venda_real:r2(d.vendaReal),
@@ -470,7 +470,7 @@ async function fetchAll(table,cols,order){const out=[];
 const mapPerfil=x=>x?{id:x.id,nome:x.nome||'',email:x.email||'',mensagem:x.mensagem||'',lojasSolicitadas:x.lojas_solicitadas||[],status:x.status,perfil:x.perfil,regioes:x.regioes||[],lojas:x.lojas||[],
   solicitadoEm:Date.parse(x.solicitado_em)||null,decididoEm:Date.parse(x.decidido_em)||null,aprovadoEm:Date.parse(x.aprovado_em)||null}:null;
 const LOADERS={
-  lojas:async()=>{const r=await fetchAll('lojas','*',['id']);const m={};r.forEach(x=>{m[x.id]={id:x.id,nome:x.nome,regiao:x.regiao||'',uf:x.uf||'',cidade:x.cidade||'',ativo:x.ativo,criadoEm:Date.parse(x.criado_em),_id:keySeg(x.id)};});S.lojas=m;},
+  lojas:async()=>{const r=await fetchAll('lojas','*',['id']);const m={};r.forEach(x=>{m[x.id]={id:x.id,nome:x.nome,regiao:x.regiao||'',uf:x.uf||'',cidade:x.cidade||'',gestor:x.gestor||'',ativo:x.ativo,criadoEm:Date.parse(x.criado_em),_id:keySeg(x.id)};});S.lojas=m;},
   vendedores:async()=>{const r=await fetchAll('vendedores','*',['id']);const m={};r.forEach(x=>{m[x.id]={id:x.id,nome:x.nome,lojaId:x.loja_id,ativo:x.ativo,_id:keySeg(x.id)};});S.vendedores=m;},
   periodos:async()=>{const r=await fetchAll('periodos','*',['ano','mes']);const m={};r.forEach(x=>{const k=pkey(x.ano,x.mes);m[k]={ano:x.ano,mes:x.mes,diasUteis:x.dias_uteis,_id:k};});S.periodos=m;},
   lancamentos:async()=>{const r=await fetchAll('lancamentos','*',['ano','mes','loja_id','vendedor_id']);const m={};
@@ -1531,8 +1531,8 @@ function viewCad(v){
     ${adm?'<button class="btn" data-act="backup" title="Lojas, vendedores, períodos, lançamentos, cidades e acessos">Baixar backup</button><button class="btn" data-act="restore" title="Carrega um backup .json, inclusive o do app anterior">Restaurar backup</button>':''}
     ${ed?`<button class="btn primary" data-act="${{lojas:'newLoja',vendedores:'newVend',periodos:'newPer'}[tab]}">${{lojas:'Nova loja',vendedores:'Novo vendedor',periodos:'Novo período'}[tab]}</button>`:''}</div>`;
   let body='';
-  if(tab==='lojas'){const ls=Object.values(S.lojas).filter(l=>!q||norm([l.id,l.nome,l.regiao,l.uf,ufLabel(l.uf),l.cidade].join(' ')).includes(norm(q))).sort((a,b)=>sortPt(a.id,b.id));
-    body=munBox()+(ls.length?`<div class="tw"><table class="t"><thead><tr><th>Código</th><th>Nome</th><th>Região</th><th>Estado</th><th>Cidade</th><th class="r">Vendedores</th><th>Situação</th><th></th></tr></thead><tbody>${ls.map(l=>`<tr><td class="num">${esc(l.id)}</td><td>${esc(l.nome)}</td><td>${esc(l.regiao)}</td><td title="${esc(ufLabel(l.uf))}">${esc(l.uf||'')}</td><td>${esc(l.cidade)}</td><td class="r">${Object.values(S.vendedores).filter(x=>x.lojaId===l.id).length}</td><td>${l.ativo===false?'Inativa':'Ativa'}</td><td class="r">${ed?`<button class="btn small" data-act="editLoja" data-id="${esc(l.id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delLoja" data-id="${esc(l.id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('loja'));}
+  if(tab==='lojas'){const ls=Object.values(S.lojas).filter(l=>!q||norm([l.id,l.nome,l.regiao,l.uf,ufLabel(l.uf),l.cidade,l.gestor].join(' ')).includes(norm(q))).sort((a,b)=>sortPt(a.id,b.id));
+    body=munBox()+(ls.length?`<div class="tw"><table class="t"><thead><tr><th>Código</th><th>Nome</th><th>Região</th><th>Estado</th><th>Cidade</th><th>Gestor</th><th class="r">Vendedores</th><th>Situação</th><th></th></tr></thead><tbody>${ls.map(l=>`<tr><td class="num">${esc(l.id)}</td><td>${esc(l.nome)}</td><td>${esc(l.regiao)}</td><td title="${esc(ufLabel(l.uf))}">${esc(l.uf||'')}</td><td>${esc(l.cidade)}</td><td>${esc(l.gestor||'')}</td><td class="r">${Object.values(S.vendedores).filter(x=>x.lojaId===l.id).length}</td><td>${l.ativo===false?'Inativa':'Ativa'}</td><td class="r">${ed?`<button class="btn small" data-act="editLoja" data-id="${esc(l.id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delLoja" data-id="${esc(l.id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('loja'));}
   if(tab==='vendedores'){const vs=Object.values(S.vendedores).filter(x=>!q||[x.id,x.nome,lojaNome(x.lojaId)].join(' ').toLowerCase().includes(q)).sort((a,b)=>sortPt(a.nome,b.nome));
     body=vs.length?`<div class="tw"><table class="t"><thead><tr><th>Código</th><th>Nome</th><th>Loja</th><th>Situação</th><th></th></tr></thead><tbody>${vs.map(x=>`<tr><td class="num">${esc(x.id)}</td><td>${esc(x.nome)}</td><td>${esc(lojaNome(x.lojaId))}</td><td>${x.ativo===false?'Inativo':'Ativo'}</td><td class="r">${ed?`<button class="btn small" data-act="editVend" data-id="${esc(x.id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delVend" data-id="${esc(x.id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('vendedor');}
   if(tab==='periodos'){const ps=Object.values(S.periodos).filter(p=>!q||`${MESES[p.mes-1]} ${p.ano}`.includes(q)).sort((a,b)=>b.ano-a.ano||b.mes-a.mes);
@@ -1577,11 +1577,13 @@ function combo(input,{options,onPick,max=80,empty='Nenhum resultado'}){
 async function formLoja(docId){const l=docId?S.lojas[docId]:null;
   let sug='';if(!l){sug=proxCodLocal();try{const r=await sbq(S.sb.rpc('proximo_codigo_loja'));if(r)sug=r;}catch(e){}}
   const regs=[...new Set(Object.values(S.lojas).map(x=>x.regiao).filter(Boolean))].sort(sortPt);
+  const gests=[...new Set(Object.values(S.lojas).map(x=>x.gestor).filter(Boolean))].sort(sortPt);
   formModal(l?`Editar ${l.nome}`:'Nova loja',`<label class="field"><span>Código da loja</span><input class="inp" name="id" value="${esc(l?.id||sug)}" ${l?'disabled':''} inputmode="numeric" maxlength="3" placeholder="Ex.: 041">${l?'':`<span class="fhint">Sugerido o próximo código livre: ${esc(sug)}. Use 3 dígitos.</span>`}</label>
     <label class="field"><span>Nome</span><input class="inp" name="nome" value="${esc(l?nomeLoja(l.id):nomeLoja(sug))}" readonly tabindex="-1" style="background:transparent"><span class="fhint">Montado automaticamente: Tintomax Loja + código.</span></label>
     <div class="field"><span>Região</span><span class="combo"><input class="inp" name="regiao" value="${esc(l?.regiao||'')}" placeholder="Digite ou escolha uma região"></span></div>
     <div class="field"><span>Estado</span><span class="combo"><input class="inp" name="uf" data-v="${esc(l?.uf||'')}" value="${esc(ufLabel(l?.uf))}" placeholder="Digite para pesquisar, ex.: Santa ou SC"></span></div>
     <div class="field"><span>Cidade</span><span class="combo"><input class="inp" name="cidade" value="${esc(l?.cidade||'')}" placeholder="${l?.uf?'Digite para pesquisar':'Escolha o estado primeiro'}"></span><span class="fhint" id="cidhint"></span></div>
+    <div class="field"><span>Gestor da loja</span><span class="combo"><input class="inp" name="gestor" value="${esc(l?.gestor||'')}" placeholder="Digite ou escolha um gestor"></span></div>
     <label class="field" style="flex-direction:row;gap:8px"><input type="checkbox" name="ativo" ${l?.ativo===false?'':'checked'}> Loja ativa</label>`,
   async root=>{const id=l?l.id:codLoja(fv(root,'id'));const nome=nomeLoja(id);
     if(!id)return 'Informe o código da loja.';
@@ -1592,7 +1594,8 @@ async function formLoja(docId){const l=docId?S.lojas[docId]:null;
     let cidade=fv(root,'cidade');
     if(cidade&&!uf)return 'Escolha o estado antes da cidade.';
     if(cidade&&S.mun[uf]){const c=canonCidade(uf,cidade);if(!S.mun[uf].includes(c))return `Cidade não encontrada em ${ufLabel(uf)}. Escolha uma opção da lista.`;cidade=c;}
-    const doc={id,nome,regiao:fv(root,'regiao'),uf:uf||'',cidade,ativo:root.querySelector('[name="ativo"]').checked,criadoEm:l?.criadoEm||Date.now()};
+    const gestor=fv(root,'gestor').replace(/\s+/g,' ');const gEx=gests.find(g=>norm(g)===norm(gestor));
+    const doc={id,nome,regiao:fv(root,'regiao'),uf:uf||'',cidade,gestor:gEx||gestor,ativo:root.querySelector('[name="ativo"]').checked,criadoEm:l?.criadoEm||Date.now()};
     try{if(l)await setDoc('lojas',keySeg(id),doc);
       else await sbq(S.sb.from('lojas').insert(toRow('lojas',doc))).finally(()=>reloadSoon('lojas'));
       S.lojas[id]={...doc,_id:keySeg(id)};if(S.rel&&!l&&!S.rel.lojaId)S.rel.lojaId=id;logHist('Cadastro',`${l?'Editou':'Cadastrou'} a loja ${nome} (${id})`);toast('Loja salva.');schedule();}
@@ -1603,6 +1606,7 @@ async function formLoja(docId){const l=docId?S.lojas[docId]:null;
   const curUF=()=>ufEl.dataset.v||resolveUF(ufEl.value)||'';
   const setHint=()=>{const uf=curUF();cEl.placeholder=uf?'Digite para pesquisar':'Escolha o estado primeiro';
     hint.textContent=!uf?'':(S.mun[uf]?`Lista do IBGE com ${S.mun[uf].length.toLocaleString('pt-BR')} cidades em ${ufLabel(uf)}.`:'Mostrando cidades já cadastradas neste estado. Você também pode digitar o nome.');};
+  combo(root.querySelector('[name="gestor"]'),{options:()=>gests.map(g=>({v:g,label:g,sub:Object.values(S.lojas).filter(x=>x.gestor===g).map(x=>x.id).join(', ')})),empty:'Nenhum gestor cadastrado. Digite o nome.'});
   combo(root.querySelector('[name="regiao"]'),{options:()=>regs.map(r=>({v:r,label:r})),empty:'Nenhuma região cadastrada. Digite o nome de uma nova.'});
   const cc=combo(cEl,{options:()=>{const uf=curUF();return uf?cidadesUF(uf).map(c=>({v:c,label:c})):[];},max:60,
     empty:()=>curUF()?(S.mun[curUF()]?'Nenhuma cidade encontrada.':'Nenhuma cidade cadastrada neste estado. Digite o nome.'):'Escolha o estado primeiro.'});
@@ -1754,7 +1758,7 @@ async function preDel(email){try{await sbq(S.sb.from('pre_aprovacoes').delete().
 async function backupCompleto(){
   if(!isAdmin())return;
   const b={app:'acompanhamento-vendas',versao:1,geradoEm:new Date().toISOString(),
-    lojas:Object.values(S.lojas).map(l=>({id:l.id,nome:l.nome,regiao:l.regiao||'',uf:l.uf||'',cidade:l.cidade||'',ativo:l.ativo!==false})),
+    lojas:Object.values(S.lojas).map(l=>({id:l.id,nome:l.nome,regiao:l.regiao||'',uf:l.uf||'',cidade:l.cidade||'',gestor:l.gestor||'',ativo:l.ativo!==false})),
     vendedores:Object.values(S.vendedores).map(v=>({id:v.id,nome:v.nome,lojaId:v.lojaId,ativo:v.ativo!==false})),
     periodos:Object.values(S.periodos).map(p=>({ano:p.ano,mes:p.mes,diasUteis:p.diasUteis})),
     lancamentos:Object.values(S.lanc).map(x=>({ano:x.ano,mes:x.mes,lojaId:x.lojaId,vendedorId:x.vendedorId,meta:num(x.meta),vendaReal:num(x.vendaReal),vendaIdeal:x.vendaIdeal??null,devolucoes:num(x.devolucoes),atualizadoEm:x.atualizadoEm||null})),
