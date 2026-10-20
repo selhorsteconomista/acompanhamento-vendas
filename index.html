@@ -411,7 +411,7 @@ const now=new Date();
 const S={reqSel:new Set(),lojasPub:null,sb:null,channel:null,me:{id:null,name:'',email:''},authView:'entrar',meLoaded:false,perfis:{},pre:[],
   lojas:{},vendedores:{},periodos:{},lanc:{},usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
   loaded:{lojas:false,vendedores:false,periodos:false,lanc:false},periodInit:false,
-  view:'dashboard',f:{ano:now.getFullYear(),mes:now.getMonth()+1,regiao:'',uf:'',cidade:'',loja:'',vend:''},
+  view:'dashboard',f:{ano:now.getFullYear(),mes:now.getMonth()+1,gestor:'',regiao:'',uf:'',cidade:'',loja:'',vend:''},
   groupBy:'loja',regBy:'uf',acompMode:'loja',cmp:{anos:null,base:'min',de:null,ate:null,by:'loja'},cadTab:'lojas',histQ:'',cadQ:'',imp:null,editing:false,pending:false,modal:null,charts:{}};
 const role=()=>{const p=S.perfil;if(!p||p.status!=='aprovado')return null;return ['admin','gestao','vendas'].includes(p.perfil)?p.perfil:null;};
 const canWrite=()=>role()==='admin';
@@ -421,6 +421,7 @@ const ROLE_LABEL={admin:'Administrador',gestao:'Gestão',vendas:'Vendas'};
 /* ============ Filtros ============ */
 function lojaOk(lid){const l=S.lojas[lid],f=S.f;
   if(f.loja&&lid!==f.loja)return false;
+  if(f.gestor&&(l?.gestor||'')!==f.gestor)return false;
   if(f.regiao&&(l?.regiao||'')!==f.regiao)return false;
   if(f.uf&&(l?.uf||'')!==f.uf)return false;
   if(f.cidade&&(l?.cidade||'')!==f.cidade)return false;return true;}
@@ -659,7 +660,8 @@ function renderNav(){
 }
 function renderTop(){
   const f=S.f;const anos=new Set([now.getFullYear(),f.ano]);Object.values(S.lanc).forEach(x=>anos.add(x.ano));Object.values(S.periodos).forEach(p=>anos.add(p.ano));
-  const lojasAll=Object.values(S.lojas);
+  const gestores=[...new Set(Object.values(S.lojas).map(l=>l.gestor||''))].filter(Boolean).sort(sortPt);
+  const lojasAll=Object.values(S.lojas).filter(l=>!f.gestor||l.gestor===f.gestor);
   const regioes=[...new Set(lojasAll.map(l=>l.regiao||''))].filter(Boolean).sort(sortPt);
   const ufs=[...new Set(lojasAll.filter(l=>!f.regiao||l.regiao===f.regiao).map(l=>l.uf||''))].filter(Boolean).sort((a,b)=>sortPt(ufLabel(a),ufLabel(b)));
   const cidades=[...new Set(lojasAll.filter(l=>(!f.regiao||l.regiao===f.regiao)&&(!f.uf||l.uf===f.uf)).map(l=>l.cidade||''))].filter(Boolean).sort(sortPt);
@@ -682,12 +684,13 @@ function renderTop(){
   <div class="filters">
     ${S.view==='anual'?'':`<label>Ano<select data-f="ano">${[...anos].sort((a,b)=>b-a).map(a=>opt(a,a,f.ano)).join('')}</select></label>
     <label>Mês<select data-f="mes">${opt('all','Todos os meses',f.mes)}${MESES.map((m,i)=>opt(i+1,m[0].toUpperCase()+m.slice(1),f.mes)).join('')}</select></label>`}
+    <label>Gestor<select data-f="gestor">${opt('','Todos',f.gestor)}${gestores.map(g=>opt(g,g,f.gestor)).join('')}</select></label>
     <label>Região<select data-f="regiao">${opt('','Todas',f.regiao)}${regioes.map(r=>opt(r,r,f.regiao)).join('')}</select></label>
     <label>Estado<select data-f="uf">${opt('','Todos',f.uf)}${ufs.map(u=>opt(u,ufLabel(u),f.uf)).join('')}</select></label>
     <label>Cidade<select data-f="cidade">${opt('','Todas',f.cidade)}${cidades.map(r=>opt(r,r,f.cidade)).join('')}</select></label>
     <label>Loja<select data-f="loja">${opt('','Todas',f.loja)}${lojasF.map(l=>opt(l.id,l.nome,f.loja)).join('')}</select></label>
     <label>Vendedor<select data-f="vend">${opt('','Todos',f.vend)}${vends.map(v=>opt(v.id,v.nome,f.vend)).join('')}${opt(OUT,'Outros (sem vendedor)',f.vend)}</select></label>
-    ${(f.regiao||f.uf||f.cidade||f.loja||f.vend)?'<button class="clearf" data-act="clearf">Limpar filtros</button>':''}
+    ${(f.gestor||f.regiao||f.uf||f.cidade||f.loja||f.vend)?'<button class="clearf" data-act="clearf">Limpar filtros</button>':''}
   </div>`;
 }
 
@@ -699,7 +702,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.menu'))closeMenus();
   if(!a)return;const act=a.dataset.act,d=a.dataset;
   const H={
-    clearf:()=>{Object.assign(S.f,{regiao:'',uf:'',cidade:'',loja:'',vend:''});render();},
+    clearf:()=>{Object.assign(S.f,{gestor:'',regiao:'',uf:'',cidade:'',loja:'',vend:''});render();},
     groupBy:()=>{S.groupBy=d.v;render();},
     regBy:()=>{S.regBy=d.v;render();},
     cmpBy:()=>{S.cmp.by=d.v;render();},
@@ -724,7 +727,7 @@ document.addEventListener('click',e=>{
     newLoja:()=>formLoja(null),editLoja:()=>formLoja(d.id),delLoja:()=>delLoja(d.id),
     newVend:()=>formVend(null,d.loja),editVend:()=>formVend(d.id),delVend:()=>delVend(d.id),
     newPer:()=>formPer(null),editPer:()=>formPer(d.id),delPer:()=>delPer(d.id),
-    filterLoja:()=>{const l=S.lojas[d.id];S.f.loja=d.id;S.f.regiao=l?.regiao||'';S.f.uf=l?.uf||'';S.f.cidade=l?.cidade||'';S.f.vend='';closeModal();render();},
+    filterLoja:()=>{const l=S.lojas[d.id];S.f.loja=d.id;S.f.gestor='';S.f.regiao=l?.regiao||'';S.f.uf=l?.uf||'';S.f.cidade=l?.cidade||'';S.f.vend='';closeModal();render();},
     pickMun:()=>$('#munfile')?.click(),
     gView:()=>{if(d.v==='criar'){S.reqSel=new Set();S.lojasPub=null;}S.authView=d.v;render();},glReg:()=>marcaRegiao(d.v),gLogin:()=>gLogin(),gSignup:()=>gSignup(),gForgot:()=>gForgot(),gNewPass:()=>gNewPass(),gReq:()=>gReq(),gSair:()=>sair(),
     reqEdit:()=>{S.reqSel=new Set(S.perfil?.lojasSolicitadas||[]);S.lojasPub=null;S.reqEdit=true;render();},reqCancel:()=>{S.reqEdit=false;render();},
@@ -743,7 +746,7 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.matches('.filters select')){const k=t.dataset.f;let v=t.value;
     if(k==='ano')v=Number(v);if(k==='mes')v=v==='all'?'all':Number(v);S.f[k]=v;
-    if(k==='regiao'){S.f.uf='';S.f.cidade='';S.f.loja='';S.f.vend='';}if(k==='uf'){S.f.cidade='';S.f.loja='';S.f.vend='';}if(k==='cidade'){S.f.loja='';S.f.vend='';}if(k==='loja')S.f.vend='';
+    if(k==='gestor'){S.f.regiao='';S.f.uf='';S.f.cidade='';S.f.loja='';S.f.vend='';}if(k==='regiao'){S.f.uf='';S.f.cidade='';S.f.loja='';S.f.vend='';}if(k==='uf'){S.f.cidade='';S.f.loja='';S.f.vend='';}if(k==='cidade'){S.f.loja='';S.f.vend='';}if(k==='loja')S.f.vend='';
     render();return;}
   if(t.matches('select[data-cmp]')){const k=t.dataset.cmp;const K=cmpState();S.cmp.anos=K.anos;S.cmp.de??=K.de;S.cmp.ate??=K.ate;
     S.cmp[k]=k==='base'?(/^\d+$/.test(t.value)?Number(t.value):t.value):Number(t.value);render();return;}
@@ -1132,8 +1135,8 @@ function viewAcomp(v){
   if(S.f.mes==='all'){v.innerHTML=modeBar+'<div class="empty"><p>Escolha um mês no filtro acima para ver a tabela de acompanhamento.</p></div>';return;}
   const ano=S.f.ano,mes=S.f.mes;
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id)&&(l.ativo!==false||Object.values(S.lanc).some(x=>x.lojaId===l.id&&x.ano===ano&&x.mes===mes))).sort((a,b)=>sortPt(a.id,b.id));
-  const orphan=[...new Set(Object.values(S.lanc).filter(x=>x.ano===ano&&x.mes===mes&&!S.lojas[x.lojaId]&&!S.f.regiao&&!S.f.uf&&!S.f.cidade&&(!S.f.loja||S.f.loja===x.lojaId)).map(x=>x.lojaId))];
-  if(!lojas.length&&!orphan.length){v.innerHTML=modeBar+`<div class="empty"><p>Nenhuma loja cadastrada${S.f.regiao||S.f.uf||S.f.cidade?' para os filtros escolhidos':''}.</p>${canWrite()?'<button class="btn primary" data-act="goCad" data-v="lojas">Cadastrar loja</button>':''}</div>`;return;}
+  const orphan=[...new Set(Object.values(S.lanc).filter(x=>x.ano===ano&&x.mes===mes&&!S.lojas[x.lojaId]&&!S.f.gestor&&!S.f.regiao&&!S.f.uf&&!S.f.cidade&&(!S.f.loja||S.f.loja===x.lojaId)).map(x=>x.lojaId))];
+  if(!lojas.length&&!orphan.length){v.innerHTML=modeBar+`<div class="empty"><p>Nenhuma loja cadastrada${S.f.gestor||S.f.regiao||S.f.uf||S.f.cidade?' para os filtros escolhidos':''}.</p>${canWrite()?'<button class="btn primary" data-act="goCad" data-v="lojas">Cadastrar loja</button>':''}</div>`;return;}
   if(S.acompMode==='regiao'||S.acompMode==='uf'||S.acompMode==='gestor'){v.innerHTML=modeBar+regionSheets(ano,mes,S.acompMode);return;}
   v.innerHTML=modeBar+lojas.map(l=>sheetHTML(l.id,ano,mes)).join('')+orphan.map(id=>sheetHTML(id,ano,mes)).join('');
 }
