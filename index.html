@@ -426,7 +426,7 @@ function calc(meta,real,ideal,dev){meta=r2(meta);real=r2(real);dev=r2(dev);ideal
 let MOV_IDX=null;
 function diasMov(lojaId,ano,mes){if(!MOV_IDX){MOV_IDX={};for(const x of Object.values(S.diario))if(num(x.valor)>0){const k=x.data.slice(0,7)+'|'+x.lojaId;MOV_IDX[k]=(MOV_IDX[k]||0)+1;}}
   return MOV_IDX[`${ano}-${pad2(mes)}|${lojaId}`]||0;}
-function vIdeal(x){const dias=diasPeriodo(x.ano,x.mes);if(!dias)return 0;return r2(num(x.meta)/dias*diasMov(x.lojaId,x.ano,x.mes));}
+function vIdeal(x){const dias=diasLoja(x.ano,x.mes,x.lojaId);if(!dias)return 0;return r2(num(x.meta)/dias*diasMov(x.lojaId,x.ano,x.mes));}
 function agg(rows){let m=0,re=0,i=0,d=0;for(const x of rows){m+=num(x.meta);re+=num(x.vendaReal);i+=vIdeal(x);d+=num(x.devolucoes);}return calc(m,re,i,d);}
 function st(p){if(p==null||!isFinite(p))return{c:'nd',t:'Sem meta'};if(p<100)return{c:'below',t:'Abaixo da meta'};if(p<105)return{c:'hit',t:'Meta atingida'};return{c:'over',t:'Meta superada'};}
 function badge(p){const s=st(p);return `<span class="badge ${s.c}" title="${s.t}">${fmtPct(p)}</span>`;}
@@ -438,7 +438,7 @@ function icon(id){return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id
 /* ============ Estado ============ */
 const now=new Date();
 const S={reqSel:new Set(),lojasPub:null,sb:null,channel:null,me:{id:null,name:'',email:''},authView:'entrar',meLoaded:false,perfis:{},pre:[],
-  lojas:{},vendedores:{},periodos:{},lanc:{},diario:{},diarioErr:null,usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
+  lojas:{},vendedores:{},periodos:{},lanc:{},diario:{},diarioErr:null,diasLoja:{},diasLojaErr:null,usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
   loaded:{lojas:false,vendedores:false,periodos:false,lanc:false},periodInit:false,
   view:'dashboard',f:{ano:now.getFullYear(),mes:now.getMonth()+1,gestor:'',regiao:'',uf:'',cidade:'',loja:'',vend:''},
   groupBy:'loja',regBy:'uf',acompMode:'loja',cmp:{anos:null,base:'min',de:null,ate:null,by:'loja'},cadTab:'lojas',histQ:'',cadQ:'',imp:null,editing:false,pending:false,modal:null,charts:{}};
@@ -456,6 +456,17 @@ function lojaOk(lid){const l=S.lojas[lid],f=S.f;
   if(f.cidade&&(l?.cidade||'')!==f.cidade)return false;return true;}
 function lancs({ano=S.f.ano,mes=S.f.mes,ignoreVend=false}={}){
   return Object.values(S.lanc).filter(x=>x.ano===ano&&(mes==='all'||x.mes===mes)&&lojaOk(x.lojaId)&&(ignoreVend||!S.f.vend||x.vendedorId===S.f.vend));}
+const dlkey=(ano,mes,loja)=>`${ano}-${pad2(mes)}__${keySeg(loja)}`;
+/* Dias úteis da loja no mês: valor específico da loja; se não houver, o padrão do mês (Cadastros > Períodos) */
+function diasLoja(ano,mes,lojaId){const o=S.diasLoja[dlkey(ano,mes,lojaId)];if(o&&num(o.diasUteis))return num(o.diasUteis);return diasPeriodo(ano,mes);}
+function diasLojaProprio(ano,mes,lojaId){return !!S.diasLoja[dlkey(ano,mes,lojaId)];}
+/* Meta diária somando cada loja pela sua própria quantidade de dias úteis */
+function metaDiaria(rows,ano,mes){if(mes==='all'){const d=diasPeriodo(ano,'all');return d?agg(rows).meta/d:null;}
+  const by={};rows.forEach(x=>{by[x.lojaId]=(by[x.lojaId]||0)+num(x.meta);});let t=0,ok=false;
+  for(const [l,m] of Object.entries(by)){const d=diasLoja(ano,mes,l);if(d){t+=m/d;ok=true;}}return ok?t:null;}
+function diasTxt(lojaIds,ano,mes){if(mes==='all'){const d=diasPeriodo(ano,'all');return d?fmtDias(d):'—';}
+  const vs=[...new Set(lojaIds.map(l=>diasLoja(ano,mes,l)).filter(Boolean))].sort((a,b)=>a-b);
+  if(!vs.length)return '—';if(vs.length===1)return fmtDias(vs[0]);return `${fmtDias(vs[0])} a ${fmtDias(vs[vs.length-1])}`;}
 function diasPeriodo(ano,mes){if(mes==='all'){let d=0;for(const p of Object.values(S.periodos))if(p.ano===ano)d+=num(p.diasUteis);return d||null;}
   const p=S.periodos[pkey(ano,mes)];return p?num(p.diasUteis)||null:null;}
 function lojaNome(id){return S.lojas[id]?.nome||nomeLoja(id);}
@@ -464,7 +475,7 @@ function periodoLabel(){return S.f.mes==='all'?`Ano de ${S.f.ano}`:`${MESES[S.f.
 function lastUpdate(rows){let m=0;for(const r of rows)if(r.atualizadoEm>m)m=r.atualizadoEm;return m||null;}
 
 /* ============ Persistência (Supabase) ============ */
-const PK={lojas:'id',vendedores:'id',periodos:'ano,mes',lancamentos:'ano,mes,loja_id,vendedor_id',municipios:'uf,nome',pre_aprovacoes:'email',vendas_diarias:'data,loja_id'};
+const PK={lojas:'id',vendedores:'id',periodos:'ano,mes',lancamentos:'ano,mes,loja_id,vendedor_id',municipios:'uf,nome',pre_aprovacoes:'email',vendas_diarias:'data,loja_id',dias_uteis_lojas:'ano,mes,loja_id'};
 const iso=ms=>ms?new Date(ms).toISOString():null;
 async function sbq(p){const {data,error}=await p;if(error)throw error;return data;}
 function toRow(col,d){switch(col){
@@ -473,6 +484,7 @@ function toRow(col,d){switch(col){
   case 'periodos':return{ano:d.ano,mes:d.mes,dias_uteis:d.diasUteis};
   case 'lancamentos':return{ano:d.ano,mes:d.mes,loja_id:d.lojaId,vendedor_id:d.vendedorId,meta:r2(d.meta),venda_real:r2(d.vendaReal),
     venda_ideal:d.vendaIdeal==null?null:r2(d.vendaIdeal),devolucoes:r2(d.devolucoes),atualizado_em:iso(d.atualizadoEm)||new Date().toISOString(),atualizado_por:S.me.id,origem:d.origem||'manual'};
+  case 'dias_uteis_lojas':return{ano:d.ano,mes:d.mes,loja_id:d.lojaId,dias_uteis:d.diasUteis,atualizado_em:new Date().toISOString(),atualizado_por:S.me.id};
   case 'vendas_diarias':return{data:d.data,loja_id:d.lojaId,valor:r2(d.valor),atualizado_em:iso(d.atualizadoEm)||new Date().toISOString(),atualizado_por:S.me.id};}
   return d;}
 function setDoc(col,_id,d){return sbq(S.sb.from(col).upsert(toRow(col,d),{onConflict:PK[col]})).finally(()=>reloadSoon(col));}
@@ -510,6 +522,9 @@ const LOADERS={
   vendas_diarias:async()=>{try{const r=await fetchAll('vendas_diarias','data,loja_id,valor,atualizado_em',['data','loja_id']);const m={};
       r.forEach(x=>{const k=dkey(x.data,x.loja_id);m[k]={data:x.data,lojaId:x.loja_id,valor:Number(x.valor),atualizadoEm:Date.parse(x.atualizado_em),_id:k};});S.diario=m;S.diarioErr=null;MOV_IDX=null;}
     catch(e){console.error('vendas_diarias',e);S.diario={};MOV_IDX=null;S.diarioErr=(e&&(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')))?'tabela':dbErr(e);}},
+  dias_uteis_lojas:async()=>{try{const r=await fetchAll('dias_uteis_lojas','ano,mes,loja_id,dias_uteis',['ano','mes','loja_id']);const m={};
+      r.forEach(x=>{const k=dlkey(x.ano,x.mes,x.loja_id);m[k]={ano:x.ano,mes:x.mes,lojaId:x.loja_id,diasUteis:Number(x.dias_uteis),_id:k};});S.diasLoja=m;S.diasLojaErr=null;}
+    catch(e){console.error('dias_uteis_lojas',e);S.diasLoja={};S.diasLojaErr=(e&&(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')))?'tabela':dbErr(e);}},
   historico:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('historico').select('*').order('em',{ascending:false}).limit(1000));
     S.hist=r.map(x=>({em:Date.parse(x.em),tipo:x.tipo,descricao:x.descricao,usuario:x.usuario}));},
   perfis:async()=>{if(!isAdmin()){await loadMe();return;}const r=await fetchAll('perfis','*',['id']);const m={};r.forEach(x=>{m[x.id]=mapPerfil(x);});S.perfis=m;
@@ -545,7 +560,7 @@ async function boot(){
 }
 function gate(t,m){$('#app').innerHTML=`<div class="gate" style="grid-column:1/-1"><h1>${esc(t)}</h1><p class="muted">${esc(m)}</p></div>`;}
 let curUid;
-function resetData(){S.lojas={};S.vendedores={};S.periodos={};S.lanc={};S.diario={};MOV_IDX=null;S.diarioErr=null;S.hist=[];S.perfis={};S.pre=[];S.mun={};S.munMeta=null;S.perfil=null;S.periodInit=false;S.dataStarted=false;
+function resetData(){S.lojas={};S.vendedores={};S.periodos={};S.lanc={};S.diario={};S.diasLoja={};MOV_IDX=null;S.diarioErr=null;S.hist=[];S.perfis={};S.pre=[];S.mun={};S.munMeta=null;S.perfil=null;S.periodInit=false;S.dataStarted=false;
   S.loaded={lojas:false,vendedores:false,periodos:false,lanc:false};if(S.channel){S.sb.removeChannel(S.channel);S.channel=null;}}
 async function handleSession(session){
   const uid=session?.user?.id||null;
@@ -559,14 +574,14 @@ async function handleSession(session){
 async function loadMe(){const d=await sbq(S.sb.from('perfis').select('*').eq('id',S.me.id).maybeSingle());S.perfil=mapPerfil(d);S.me.name=S.perfil?.nome||'';}
 function startData(){
   if(!S.channel){S.channel=S.sb.channel('dados-'+S.me.id);
-    ['lojas','vendedores','periodos','lancamentos','vendas_diarias'].forEach(t=>S.channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{if(role())reloadSoon(t);}));
+    ['lojas','vendedores','periodos','lancamentos','vendas_diarias','dias_uteis_lojas'].forEach(t=>S.channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{if(role())reloadSoon(t);}));
     S.channel.on('postgres_changes',{event:'*',schema:'public',table:'perfis'},p=>{
       if((p.new&&p.new.id===S.me.id)||(p.old&&p.old.id===S.me.id)){loadMe().then(()=>{if(role()&&!S.dataStarted)startData();else if(!role()){S.dataStarted=false;}schedule();});}
       if(isAdmin())reloadSoon('perfis');});
     S.channel.subscribe();}
   if(role()&&!S.dataStarted){S.dataStarted=true;
     if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios','regras_importacao'].forEach(t=>reload(t));}
-    ['lojas','vendedores','periodos','lancamentos','vendas_diarias'].forEach(t=>reload(t));}
+    ['lojas','vendedores','periodos','lancamentos','vendas_diarias','dias_uteis_lojas'].forEach(t=>reload(t));}
   render();
 }
 async function sair(){await S.sb.auth.signOut();S.authView='entrar';}
@@ -744,6 +759,7 @@ document.addEventListener('click',e=>{
     cmpYear:()=>{const K=cmpState();const y=Number(d.v);let a=[...K.anos];if(a.includes(y)){if(a.length===1)return;a=a.filter(x=>x!==y);}else{if(a.length>=6){toast('Compare até 6 anos por vez.',true);return;}a.push(y);}S.cmp.anos=a.sort((p,q)=>p-q);S.cmp.de=null;S.cmp.ate=null;render();},
     acompMode:()=>{S.acompMode=d.v;render();},
     diarioCSV:()=>exportDiario(),
+    diasMassa:()=>formDiasMassa(),
     cadTab:()=>{S.cadTab=d.v;S.cadQ='';render();},
     openLoja:()=>openLojaDetail(d.id),
     openVend:()=>openVendDetail(d.id),
@@ -836,10 +852,17 @@ async function onCellChange(inp){
   }catch(e){toast(dbErr(e),true);}
 }
 function fmtCellVal(l,f){if(f==='vendaIdeal'&&(l.vendaIdeal==null))return fmtN2(num(l.meta));return fmtN2(num(l[f]));}
+async function gravarDiasLojas(ano,mes,lojaIds,v){
+  const muda=lojaIds.filter(l=>diasLoja(ano,mes,l)!==v||!diasLojaProprio(ano,mes,l));if(!muda.length)return 0;
+  muda.forEach(l=>{const k=dlkey(ano,mes,l);S.diasLoja[k]={ano,mes,lojaId:l,diasUteis:v,_id:k};});
+  await upsertMany('dias_uteis_lojas',muda.map(l=>toRow('dias_uteis_lojas',{ano,mes,lojaId:l,diasUteis:v})));
+  logHist('Período',muda.length===1?`Dias úteis de ${lojaNome(muda[0])} em ${pad2(mes)}/${ano}: ${fmtDias(v)}`:`Dias úteis de ${pad2(mes)}/${ano} = ${fmtDias(v)} para ${muda.length} lojas (${muda.slice(0,4).map(lojaNome).join(', ')}${muda.length>4?', …':''})`);
+  return muda.length;}
 async function onDiasChange(inp){
   if(!canWrite()){toast('Seu perfil é somente consulta.',true);return;}
   const ano=Number(inp.dataset.ano),mes=Number(inp.dataset.mes);const v=parseDias(inp.value);
   if(v==null){inp.classList.add('err');toast(MSG_DIAS,true);return;}inp.classList.remove('err');inp.value=fmtDias(v);
+  if(inp.dataset.loja&&!S.diasLojaErr){try{await gravarDiasLojas(ano,mes,[inp.dataset.loja],v);schedule();}catch(e){toast(dbErr(e),true);}return;}
   const id=pkey(ano,mes);const old=S.periodos[id]?.diasUteis;if(old===v)return;
   S.periodos[id]={ano,mes,diasUteis:v,_id:id};
   try{await setDoc('periodos',id,{ano,mes,diasUteis:v});logHist('Período',`Dias úteis de ${pad2(mes)}/${ano}: ${fmtDias(old)} para ${fmtDias(v)}`);schedule();}catch(e){toast(dbErr(e),true);}
@@ -861,18 +884,19 @@ function dadosDiario(ano,mes){
   const mens=id=>agg(Object.values(S.lanc).filter(x=>x.lojaId===id&&x.ano===ano&&x.mes===mes));
   const porLoja=ids.map(id=>{const m=mens(id);let soma=0;Object.values(val[id]).forEach(v=>soma+=v);return{id,meta:m.meta,real:m.real,soma:r2(soma)};});
   const meta=r2(porLoja.reduce((a,x)=>a+x.meta,0));
-  const dias=diasPeriodo(ano,mes)||diasUteisMes(ano,mes);
+  let mdia=0;porLoja.forEach(x=>{const d=diasLoja(ano,mes,x.id)||diasUteisMes(ano,mes);if(x.meta)mdia+=x.meta/d;});
+  const dias=meta&&mdia?r2(meta/mdia):(diasPeriodo(ano,mes)||diasUteisMes(ano,mes));const diasLbl=diasTxt(ids,ano,mes);
   const hj=new Date();const hoje=(hj.getFullYear()===ano&&hj.getMonth()+1===mes)?hj.getDate():null;
   let ultimo=0;const linhas=[];let acum=0,trab=0;
   for(let d=1;d<=nd;d++){const w=new Date(ano,mes-1,d).getDay();let tot=0,tem=false;
     ids.forEach(id=>{const v=val[id][d];if(v!=null){tot+=v;tem=true;}});
     if(tem)ultimo=d;
     const util=(w>0&&w<6)||tot>0;if(util)trab++;acum+=tot;
-    linhas.push({d,w,tot:r2(tot),tem,util,acum:r2(acum),ideal:dias&&meta?r2(Math.min(meta,meta/dias*trab)):null});}
+    linhas.push({d,w,tot:r2(tot),tem,util,acum:r2(acum),ideal:meta?r2(Math.min(meta,mdia*trab)):null});}
   const total=r2(acum);
   const trabAte=linhas.filter(l=>l.d<=ultimo&&l.util).length;
   const restantes=Math.max(0,linhas.filter(l=>l.d>ultimo&&l.w>0&&l.w<6).length);
-  return{nd,lojas,ids,val,porLoja,meta,dias,hoje,ultimo,linhas,total,trabAte,restantes};}
+  return{nd,lojas,ids,val,porLoja,meta,dias,diasLbl,mdia,hoje,ultimo,linhas,total,trabAte,restantes};}
 function viewDiario(v){
   destroyCharts();const ed=canWrite();
   const head=`<div class="bar"><span class="muted" style="font-size:13.5px">Venda de cada dia por loja. O filtro de vendedor não se aplica a esta aba.</span><span class="grow"></span>
@@ -893,7 +917,7 @@ function viewDiario(v){
     <div class="kpi hero ${s.c}"><div class="l">Vendido no mês (soma dos dias)</div><div class="v num">${fmtBRL(D.total)}</div>
       <div><span class="badge ${s.c}">${D.meta?fmtPct(pct)+' da meta':'Sem meta lançada'}</span></div>
       <div class="s" style="margin-top:10px">${D.ultimo?`Lançado até o dia ${D.ultimo}`:'Nenhum dia lançado ainda'}</div></div>
-    <div class="kpi"><div class="l">Meta mensal</div><div class="v">${fmtBRL(D.meta)}</div><div class="s">Meta diária ${D.meta&&D.dias?fmtBRL(D.meta/D.dias):'—'} em ${fmtDias(D.dias)} dias úteis</div></div>
+    <div class="kpi"><div class="l">Meta mensal</div><div class="v">${fmtBRL(D.meta)}</div><div class="s">Meta diária ${D.meta?fmtBRL(D.mdia):'—'} em ${D.diasLbl} dias úteis</div></div>
     <div class="kpi"><div class="l">Média por dia trabalhado</div><div class="v">${fmtBRL(media)}</div><div class="s">${D.trabAte} ${D.trabAte===1?'dia':'dias'} até o último lançamento</div></div>
     <div class="kpi"><div class="l">Projeção para o mês</div><div class="v ${proj!=null&&D.meta?(proj<D.meta?'neg':'pos'):''}">${fmtBRL(proj)}</div><div class="s">Média diária × dias úteis</div></div>
     <div class="kpi"><div class="l">Falta para a meta</div><div class="v">${fmtBRL(falta)}</div><div class="s">${porDia!=null?`${fmtBRL(porDia)} por dia útil restante (${D.restantes})`:(falta===0&&D.meta?'Meta alcançada':'—')}</div></div>
@@ -917,7 +941,7 @@ function viewDiario(v){
     +row('Diferença (diário − mensal)',x=>{const d=r2(x.soma-x.real);return `<td class="${x.real?(Math.abs(d)<0.01?'':'neg'):'mut'}">${x.real?fmtSigned(d):'—'}</td>`;},realT?fmtSigned(r2(D.total-realT)):'—');
   v.innerHTML=head+kpis+`
   <section class="sheet"><div class="sheet-head"><h3>Vendas diárias — ${MESES[mes-1]} ${ano}</h3>
-    <div class="meta"><span>${D.ids.length} ${D.ids.length===1?'loja':'lojas'}</span><span class="dias">Dias úteis <b>${fmtDias(D.dias)}</b></span></div></div>
+    <div class="meta"><span>${D.ids.length} ${D.ids.length===1?'loja':'lojas'}</span><span class="dias">Dias úteis <b>${D.diasLbl}</b></span></div></div>
     <div class="tw"><table class="g d"><thead><tr><th>Dia</th>${th}${uma?'':'<th>Total do dia</th>'}<th>Acumulado</th><th>Ideal acumulado</th><th>Diferença</th></tr></thead>
     <tbody>${body}${foot}</tbody></table></div>
     <div class="sheet-foot">${ed?'Digite a venda de cada dia nas células em laranja claro. Para trazer vários dias de uma vez, copie a coluna no Excel e cole na célula do primeiro dia. Apague o valor para remover o lançamento do dia. ':''}Ideal acumulado: meta diária × dias trabalhados até o dia (segunda a sexta, mais sábados e domingos com venda).</div>
@@ -975,6 +999,43 @@ async function exportDiario(){const ano=S.f.ano,mes=S.f.mes;if(mes==='all')retur
   rows.push(['Meta mensal','',...D.porLoja.map(x=>f(x.meta)),f(D.meta),'','']);
   await download(`vendas_diarias_${ano}-${pad2(mes)}.csv`,'﻿'+[head,...rows].map(r=>r.join(';')).join('\r\n'));}
 
+function formDiasMassa(){
+  const ano0=S.f.ano,mes0=S.f.mes==='all'?(now.getMonth()+1):S.f.mes;
+  const lojas=Object.values(S.lojas).filter(l=>l.ativo!==false).sort((a,b)=>sortPt(a.id,b.id));
+  const pre=new Set(lojas.filter(l=>lojaOk(l.id)).map(l=>l.id));
+  const by={};lojas.forEach(l=>{(by[l.regiao||'Sem região']=by[l.regiao||'Sem região']||[]).push(l);});
+  const anos=[...new Set([ano0-1,ano0,ano0+1,...Object.values(S.periodos).map(p=>p.ano)])].sort((a,b)=>b-a);
+  formModal('Dias úteis em massa',`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <label class="field"><span>Mês</span><select class="inp" name="mes">${MESES.map((m,i)=>`<option value="${i+1}" ${i+1===mes0?'selected':''}>${m[0].toUpperCase()+m.slice(1)}</option>`).join('')}</select></label>
+      <label class="field"><span>Ano</span><select class="inp" name="ano">${anos.map(a=>`<option ${a===ano0?'selected':''}>${a}</option>`).join('')}</select></label>
+      <label class="field"><span>Dias úteis</span><input class="inp" name="dias" inputmode="decimal" placeholder="ex.: 23,5"></label>
+    </div>
+    <div class="field"><span>Aplicar nas lojas</span>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="inp" name="lq" placeholder="Pesquisar loja, cidade ou região" autocomplete="off" style="flex:1;min-width:180px">
+        <button class="link" type="button" data-dm="todas">Marcar todas</button><button class="link" type="button" data-dm="nenhuma">Desmarcar todas</button></div>
+      <div class="cklist" id="dm-lojas">${Object.keys(by).sort(sortPt).map(r=>`<div class="glreg" data-reg="${esc(r)}"><b>${esc(r)}</b><button class="link" type="button" data-dm="reg" data-v="${esc(r)}">Marcar região</button></div>`+
+        by[r].map(l=>`<label class="ck" data-reg="${esc(r)}" data-s="${esc(norm([l.id,l.nome,l.cidade,l.uf,l.gestor,r].join(' ')))}"><input type="checkbox" data-dml="${esc(l.id)}" ${pre.has(l.id)?'checked':''}> <b>${esc(l.nome)}</b> <span class="muted" data-dmv="${esc(l.id)}"></span></label>`).join('')).join('')}</div>
+      <span class="fhint" id="dm-count"></span></div>`,
+  async root=>{const ano=Number(fv(root,'ano')),mes=Number(fv(root,'mes')),dias=parseDias(fv(root,'dias'));
+    if(dias==null)return MSG_DIAS;
+    const ids=$$('input[data-dml]:checked',root).map(i=>i.dataset.dml);if(!ids.length)return 'Marque pelo menos uma loja.';
+    try{const n=await gravarDiasLojas(ano,mes,ids,dias);toast(n?`Dias úteis de ${pad2(mes)}/${ano} definidos em ${fmtDias(dias)} para ${n} ${n===1?'loja':'lojas'}.`:'Nada mudou: as lojas marcadas já tinham esse valor.');schedule();}
+    catch(e){return dbErr(e);}});
+  const root=$('#modal-root');
+  const atual=()=>{const ano=Number(fv(root,'ano')),mes=Number(fv(root,'mes'));
+    $$('[data-dmv]',root).forEach(s=>{const id=s.dataset.dmv;const d=diasLoja(ano,mes,id);const l=S.lojas[id];
+      s.textContent=[[l?.cidade,l?.uf].filter(Boolean).join('/'),`atual: ${d?fmtDias(d):'—'}${d&&!diasLojaProprio(ano,mes,id)?' (padrão)':''}`].filter(Boolean).join(' · ');});
+    const n=$$('input[data-dml]:checked',root).length;$('#dm-count').textContent=`${n} ${n===1?'loja marcada':'lojas marcadas'}.`;};
+  const vis=()=>$$('label.ck',root).filter(l=>l.style.display!=='none').map(l=>l.querySelector('input'));
+  root.querySelector('.modal').addEventListener('click',e=>{const b=e.target.closest('[data-dm]');if(!b)return;e.preventDefault();
+    const k=b.dataset.dm;if(k==='todas')vis().forEach(i=>i.checked=true);if(k==='nenhuma')vis().forEach(i=>i.checked=false);
+    if(k==='reg')$$(`label.ck[data-reg="${CSS.escape(b.dataset.v)}"]`,root).filter(l=>l.style.display!=='none').forEach(l=>l.querySelector('input').checked=true);atual();});
+  root.querySelector('.modal').addEventListener('change',e=>{if(e.target.matches('select,input[type=checkbox]'))atual();});
+  root.querySelector('[name="lq"]').addEventListener('input',e=>{const q=norm(e.target.value);
+    $$('label.ck',root).forEach(l=>l.style.display=!q||l.dataset.s.includes(q)?'':'none');
+    $$('.glreg',root).forEach(g=>{const any=$$(`label.ck[data-reg="${CSS.escape(g.dataset.reg)}"]`,root).some(l=>l.style.display!=='none');g.style.display=any?'':'none';});});
+  setTimeout(()=>root.querySelector('[name="dias"]')?.focus(),30);atual();}
 /* ============ Planilha da loja ============ */
 function sheetRows(lojaId,ano,mes){
   const vends=Object.values(S.vendedores).filter(v=>v.lojaId===lojaId&&v.ativo!==false);
@@ -988,7 +1049,7 @@ function sheetRows(lojaId,ano,mes){
 }
 function sheetHTML(lojaId,ano,mes){
   const ed=canWrite();const rows=sheetRows(lojaId,ano,mes);const loja=S.lojas[lojaId];
-  const dias=diasPeriodo(ano,mes);
+  const dias=diasLoja(ano,mes,lojaId);const proprio=diasLojaProprio(ano,mes,lojaId);
   const nMov=diasMov(lojaId,ano,mes);
   const cellIn=(r,f)=>{const l=r.l||baseLanc(ano,mes,lojaId,r.vendId);
     if(f==='vendaIdeal')return `<td class="ideal" title="${esc(dias?`${fmtBRL(num(l.meta))} ÷ ${fmtDias(dias)} dias úteis × ${nMov} ${nMov===1?'dia':'dias'} com movimento`:'Cadastre os dias úteis do mês')}">${fmtBRL(vIdeal(l))}</td>`;
@@ -1006,7 +1067,7 @@ function sheetHTML(lojaId,ano,mes){
   return `<section class="sheet" data-loja="${esc(lojaId)}">
     <div class="sheet-head"><h3>Acompanhamento mensal ${esc(loja?.nome||('Loja '+lojaId))} — ${MESES[mes-1]} ${ano}</h3>
       <div class="meta"><span>${esc([loja?.regiao,[loja?.cidade,loja?.uf].filter(Boolean).join('/')].filter(Boolean).join(', '))}</span>
-      <span>${nMov} ${nMov===1?'dia':'dias'} com movimento</span><span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
+      <span>${nMov} ${nMov===1?'dia':'dias'} com movimento</span><span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" title="${proprio?'Valor desta loja':'Padrão do mês (Cadastros > Períodos). Digite para definir um valor só desta loja.'}" data-loja="${esc(lojaId)}" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
     <div class="tw"><table class="g"><thead><tr><th>Vendedores</th><th>Meta mensal</th><th>Venda real</th><th>Venda ideal</th><th>Devoluções</th><th>% dev.</th><th>Total líquido</th><th>Status atual</th><th>Status %</th></tr></thead>
     <tbody>${body}
     <tr class="tot"><td>Total</td><td>${fmtBRL(T.meta)}</td><td>${fmtBRL(T.real)}</td><td>${fmtBRL(T.ideal)}</td><td>${fmtBRL(T.dev)}</td><td>${fmtPct(T.pctDev)}</td><td>${fmtSigned(T.liq)}</td>
@@ -1025,7 +1086,7 @@ function viewDashboard(v){
       <p>Importe o relatório de vendas do sistema (.xlsx) ou o modelo CSV, ou digite os valores na tela de acompanhamento. Para conhecer o painel, carregue o exemplo com as lojas 12, 19 e 22 de setembro de 2026.</p>
       ${canWrite()?`<button class="btn primary" data-act="goImport">Importar arquivo</button> <button class="btn" data-act="loadEx">Ver exemplo na importação</button>`:'<span class="muted">Ainda não há lançamentos das lojas liberadas para você.</span>'}</div>`;return;}
   const rows=lancs();const T=agg(rows);const s=st(T.pct);const ano=S.f.ano,mes=S.f.mes;
-  const dias=diasPeriodo(ano,mes);
+  const md=metaDiaria(rows,ano,mes);const dtx=diasTxt([...new Set(rows.map(r=>r.lojaId))],ano,mes);
   const byLoja=groupRows(rows,'loja');const lojasMeta=byLoja.filter(g=>g.c.meta>0);const lojasOk=lojasMeta.filter(g=>g.c.liq>=g.c.meta);
   const byVend=groupRows(rows.filter(r=>r.vendedorId!==OUT),'vend');const vMeta=byVend.filter(g=>g.c.meta>0);const vOk=vMeta.filter(g=>g.c.liq>=g.c.meta);
   v.innerHTML=`
@@ -1033,7 +1094,7 @@ function viewDashboard(v){
   <div class="kpis">
     <div class="kpi hero ${s.c}"><div class="l">Atingimento da meta</div><div class="v num">${fmtPct(T.pct)}</div>
       <div><span class="badge ${s.c}">${s.t}</span></div><div class="s" style="margin-top:10px">Saldo em relação à meta: <b class="${T.status<0?'neg':'pos'}">${fmtSigned(T.status)}</b></div></div>
-    <div class="kpi"><div class="l">Meta mensal consolidada</div><div class="v">${fmtBRL(T.meta)}</div><div class="s">Meta diária ${dias?fmtBRL(T.meta/dias):'—'}${dias?` em ${dias} dias úteis`:''}</div></div>
+    <div class="kpi"><div class="l">Meta mensal consolidada</div><div class="v">${fmtBRL(T.meta)}</div><div class="s">Meta diária ${md?fmtBRL(md):'—'}${dtx!=='—'?` em ${dtx} dias úteis`:''}</div></div>
     <div class="kpi"><div class="l">Venda real</div><div class="v">${fmtBRL(T.real)}</div><div class="s">Venda ideal ${fmtBRL(T.ideal)}</div></div>
     <div class="kpi"><div class="l">Devoluções</div><div class="v">${fmtBRL(T.dev)}</div><div class="s">${fmtPct(T.pctDev)} da venda real</div></div>
     <div class="kpi"><div class="l">Total líquido</div><div class="v">${fmtBRL(T.liq)}</div><div class="s">Venda real menos devoluções</div></div>
@@ -1301,7 +1362,8 @@ function drawAnualCharts(K,R){
 function viewAcomp(v){
   destroyCharts();
   const modeBar=`<div class="bar"><span class="seg" role="group" aria-label="Visualização">${[['loja','Por loja'],['regiao','Por região'],['uf','Por estado'],['gestor','Por gestor']].map(([k,l])=>`<button data-act="acompMode" data-v="${k}" aria-pressed="${S.acompMode===k}">${l}</button>`).join('')}</span><span class="grow"></span>
-    ${canWrite()?'<button class="btn small" data-act="goImport">Importar arquivo</button>':''}</div>`;
+    ${canWrite()&&!S.diasLojaErr?'<button class="btn small" data-act="diasMassa">Dias úteis em massa</button>':''}
+    ${canWrite()?'<button class="btn small" data-act="goImport">Importar arquivo</button>':''}</div>${isAdmin()&&S.diasLojaErr==='tabela'?'<div class="notice">Para definir dias úteis diferentes por loja, rode o arquivo <b>dias_uteis_lojas.sql</b> no SQL Editor do Supabase. Até lá, o valor digitado vale para todas as lojas do mês.</div>':''}`;
   if(S.f.mes==='all'){v.innerHTML=modeBar+'<div class="empty"><p>Escolha um mês no filtro acima para ver a tabela de acompanhamento.</p></div>';return;}
   const ano=S.f.ano,mes=S.f.mes;
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id)&&(l.ativo!==false||Object.values(S.lanc).some(x=>x.lojaId===l.id&&x.ano===ano&&x.mes===mes))).sort((a,b)=>sortPt(a.id,b.id));
@@ -1314,7 +1376,6 @@ function regionSheets(ano,mes,by='regiao'){
   const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id));
   const gk=l=>by==='uf'?(l.uf||'(sem estado)'):by==='gestor'?(l.gestor||'(sem gestor)'):(l.regiao||'(sem região)');const gl=k=>by==='uf'?(ufLabel(k)||k):by==='gestor'?(k==='(sem gestor)'?'Lojas sem gestor':'Gestor '+k):k;
   const regs=[...new Set(lojas.map(gk))].sort((a,b)=>sortPt(gl(a),gl(b)));
-  const dias=diasPeriodo(ano,mes);
   return regs.map(rg=>{
     const ls=lojas.filter(l=>gk(l)===rg).sort((a,b)=>sortPt(a.id,b.id));
     const rowsOf=(lid,a)=>Object.values(S.lanc).filter(x=>x.lojaId===lid&&x.ano===a&&x.mes===mes&&(!S.f.vend||x.vendedorId===S.f.vend));
@@ -1325,10 +1386,10 @@ function regionSheets(ano,mes,by='regiao'){
     const yoyRows=ls.map(l=>{const a=agg(rowsOf(l.id,ano)),b=rowsOf(l.id,ano-1);prevAll.push(...b);const bc=agg(b);const diff=a.liq-bc.liq;const p=b.length&&bc.liq?diff/Math.abs(bc.liq)*100:null;
       return `<tr><td>${esc(l.nome)}</td><td class="r">${fmtSigned(a.liq)}</td><td class="r">${b.length?fmtSigned(bc.liq):'—'}</td><td class="r ${diff<0?'neg':'pos'}">${b.length?fmtSigned(diff):'—'}</td><td class="r">${p==null?'—':`<span class="badge ${p<0?'below':'over'}">${fmtPct(p)}</span>`}</td></tr>`;}).join('');
     const PT=agg(prevAll);const pd=T.liq-PT.liq;const pp=prevAll.length&&PT.liq?pd/Math.abs(PT.liq)*100:null;
-    return `<section class="sheet"><div class="sheet-head"><h3>Acompanhamento mensal ${esc(gl(rg))} — ${MESES[mes-1]} ${ano}</h3><div class="meta"><span class="dias">Dias úteis <b>${fmtDias(dias)}</b></span></div></div>
+    return `<section class="sheet"><div class="sheet-head"><h3>Acompanhamento mensal ${esc(gl(rg))} — ${MESES[mes-1]} ${ano}</h3><div class="meta"><span class="dias">Dias úteis <b>${diasTxt(ls.map(l=>l.id),ano,mes)}</b></span></div></div>
       <div class="tw"><table class="g"><thead><tr><th>Lojas</th><th>Meta mensal</th><th>Venda real</th><th>Venda ideal</th><th>Devoluções</th><th>% dev.</th><th>Total líquido</th><th>Status atual</th><th>Status %</th></tr></thead><tbody>${body}
       <tr class="tot"><td>Total</td><td>${fmtBRL(T.meta)}</td><td>${fmtBRL(T.real)}</td><td>${fmtBRL(T.ideal)}</td><td>${fmtBRL(T.dev)}</td><td>${fmtPct(T.pctDev)}</td><td>${fmtSigned(T.liq)}</td><td class="stfill ${s.c}">${fmtSigned(T.status)}</td><td class="stfill ${s.c}">${fmtPct(T.pct)}</td></tr>
-      <tr class="md"><td>Meta diária</td><td>${dias?fmtBRL(T.meta/dias):'—'}</td><td colspan="7"></td></tr></tbody></table></div>
+      <tr class="md"><td>Meta diária</td><td>${fmtBRL(metaDiaria(all,ano,mes))}</td><td colspan="7"></td></tr></tbody></table></div>
       <div style="padding:14px 16px"><h3 style="margin:0 0 8px;font:600 16px var(--f-num)">Total líquido comparado a ${MESES[mes-1]} de ${ano-1}</h3>
       <div class="tw"><table class="t"><thead><tr><th>Loja</th><th class="r">${ano}</th><th class="r">${ano-1}</th><th class="r">Diferença</th><th class="r">Variação</th></tr></thead><tbody>${yoyRows}</tbody>
       <tfoot><tr><td>${by==='uf'?'Estado':by==='gestor'?'Gestor':'Região'}</td><td class="r">${fmtSigned(T.liq)}</td><td class="r">${prevAll.length?fmtSigned(PT.liq):'—'}</td><td class="r">${prevAll.length?fmtSigned(pd):'—'}</td><td class="r">${pp==null?'—':`<span class="badge ${pp<0?'below':'over'}">${fmtPct(pp)}</span>`}</td></tr></tfoot></table></div></div></section>`;
@@ -1379,7 +1440,7 @@ function openGroup(by,k){
 /* ============ Exportação ============ */
 function exportRows(){
   const rows=lancs().sort((a,b)=>a.ano-b.ano||a.mes-b.mes||sortPt(a.lojaId,b.lojaId)||sortPt(vendNome(a.vendedorId),vendNome(b.vendedorId)));
-  return rows.map(r=>{const l=S.lojas[r.lojaId]||{};const c=agg([r]);const d=diasPeriodo(r.ano,r.mes);
+  return rows.map(r=>{const l=S.lojas[r.lojaId]||{};const c=agg([r]);const d=diasLoja(r.ano,r.mes,r.lojaId);
     return{loja_id:r.lojaId,loja_nome:l.nome||'',regiao:l.regiao||'',estado:l.uf||'',cidade:l.cidade||'',vendedor_id:r.vendedorId===OUT?'OUTROS':r.vendedorId,vendedor_nome:vendNome(r.vendedorId),
       ano:r.ano,mes:r.mes,dias_uteis:d??'',meta_mensal:c.meta,venda_real:c.real,venda_ideal:c.ideal,devolucoes:c.dev,
       perc_devolucoes:c.pctDev,total_liquido:c.liq,status_atual:c.status,status_percentual:c.pct,meta_diaria:d?r2(c.meta/d):null,atualizado_em:r.atualizadoEm?fmtDT(r.atualizadoEm):''};});
@@ -1710,7 +1771,7 @@ function viewCad(v){
   if(tab==='vendedores'){const vs=Object.values(S.vendedores).filter(x=>!q||[x.id,x.nome,lojaNome(x.lojaId)].join(' ').toLowerCase().includes(q)).sort((a,b)=>sortPt(a.nome,b.nome));
     body=vs.length?`<div class="tw"><table class="t"><thead><tr><th>Código</th><th>Nome</th><th>Loja</th><th>Situação</th><th></th></tr></thead><tbody>${vs.map(x=>`<tr><td class="num">${esc(x.id)}</td><td>${esc(x.nome)}</td><td>${esc(lojaNome(x.lojaId))}</td><td>${x.ativo===false?'Inativo':'Ativo'}</td><td class="r">${ed?`<button class="btn small" data-act="editVend" data-id="${esc(x.id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delVend" data-id="${esc(x.id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('vendedor');}
   if(tab==='periodos'){const ps=Object.values(S.periodos).filter(p=>!q||`${MESES[p.mes-1]} ${p.ano}`.includes(q)).sort((a,b)=>b.ano-a.ano||b.mes-a.mes);
-    body=ps.length?`<div class="tw"><table class="t"><thead><tr><th>Período</th><th class="r">Dias úteis</th><th class="r">Lançamentos</th><th></th></tr></thead><tbody>${ps.map(p=>`<tr><td>${MESES[p.mes-1]} de ${p.ano}</td><td class="r">${fmtDias(p.diasUteis)}</td><td class="r">${Object.values(S.lanc).filter(x=>x.ano===p.ano&&x.mes===p.mes).length}</td><td class="r">${ed?`<button class="btn small" data-act="editPer" data-id="${esc(p._id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delPer" data-id="${esc(p._id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('período');}
+    body=ps.length?`<div class="tw"><table class="t"><thead><tr><th>Período</th><th class="r">Dias úteis (padrão)</th><th class="r">Lojas com valor próprio</th><th class="r">Lançamentos</th><th></th></tr></thead><tbody>${ps.map(p=>`<tr><td>${MESES[p.mes-1]} de ${p.ano}</td><td class="r">${fmtDias(p.diasUteis)}</td><td class="r">${Object.values(S.diasLoja).filter(x=>x.ano===p.ano&&x.mes===p.mes).length||'—'}</td><td class="r">${Object.values(S.lanc).filter(x=>x.ano===p.ano&&x.mes===p.mes).length}</td><td class="r">${ed?`<button class="btn small" data-act="editPer" data-id="${esc(p._id)}">Editar</button>`:''} ${adm?`<button class="btn small danger" data-act="delPer" data-id="${esc(p._id)}">Excluir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:emptyCad('período');}
   v.innerHTML=tabs+body;
 }
 function emptyCad(w){return `<div class="empty"><p>Nenhum ${w} encontrado. ${canWrite()?'Cadastre manualmente ou importe um CSV: lojas e vendedores novos podem ser criados durante a importação.':''}</p></div>`;}
@@ -1936,6 +1997,7 @@ async function backupCompleto(){
     vendedores:Object.values(S.vendedores).map(v=>({id:v.id,nome:v.nome,lojaId:v.lojaId,ativo:v.ativo!==false})),
     periodos:Object.values(S.periodos).map(p=>({ano:p.ano,mes:p.mes,diasUteis:p.diasUteis})),
     lancamentos:Object.values(S.lanc).map(x=>({ano:x.ano,mes:x.mes,lojaId:x.lojaId,vendedorId:x.vendedorId,meta:num(x.meta),vendaReal:num(x.vendaReal),vendaIdeal:x.vendaIdeal??null,devolucoes:num(x.devolucoes),atualizadoEm:x.atualizadoEm||null})),
+    diasUteisLojas:Object.values(S.diasLoja).map(x=>({ano:x.ano,mes:x.mes,lojaId:x.lojaId,diasUteis:num(x.diasUteis)})),
     vendasDiarias:Object.values(S.diario).map(x=>({data:x.data,lojaId:x.lojaId,valor:num(x.valor)})),
     municipios:S.mun||{},
     usuarios:Object.values(S.perfis||{}).filter(u=>u.status==='aprovado').map(u=>({email:u.email,nome:u.nome,perfil:u.perfil,regioes:u.regioes,lojas:u.lojas,status:u.status}))};
@@ -1954,6 +2016,7 @@ async function restaurar(b,us){
     await upsertMany('vendedores',b.vendedores.map(v=>toRow('vendedores',v)));
     await upsertMany('periodos',b.periodos.map(p=>toRow('periodos',p)));
     await upsertMany('lancamentos',b.lancamentos.map(x=>toRow('lancamentos',{...x,origem:'backup'})));
+    if(Array.isArray(b.diasUteisLojas)&&b.diasUteisLojas.length&&!S.diasLojaErr)await upsertMany('dias_uteis_lojas',b.diasUteisLojas.map(x=>toRow('dias_uteis_lojas',x)));
     if(Array.isArray(b.vendasDiarias)&&b.vendasDiarias.length&&!S.diarioErr)await upsertMany('vendas_diarias',b.vendasDiarias.map(x=>toRow('vendas_diarias',x)));
     const mun=[];Object.entries(b.municipios||{}).forEach(([uf,ns])=>(ns||[]).forEach(n=>mun.push({uf,nome:n})));if(mun.length)await upsertMany('municipios',mun,{ignore:true});
     let pre=0,dir=0;for(const u of us){const email=u.email.toLowerCase();const p=Object.values(S.perfis).find(x=>x.email===email);
