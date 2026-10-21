@@ -422,7 +422,12 @@ function parseDias(x){const v=typeof x==='number'?x:parseBR(x);if(v==null||!isFi
 const fmtDias=v=>(v==null||v==='')?'—':typeof v==='string'&&!isFinite(Number(v))?v:!isFinite(Number(v))?'—':Number(v).toLocaleString('pt-BR',{maximumFractionDigits:2});
 function calc(meta,real,ideal,dev){meta=r2(meta);real=r2(real);dev=r2(dev);ideal=r2(ideal);const liq=r2(real-dev);
   return {meta,real,ideal,dev,liq,status:r2(liq-meta),pctDev:real?dev/real*100:null,pct:meta?liq/meta*100:null};}
-function agg(rows){let m=0,re=0,i=0,d=0;for(const x of rows){m+=num(x.meta);re+=num(x.vendaReal);i+=(x.vendaIdeal==null?num(x.meta):num(x.vendaIdeal));d+=num(x.devolucoes);}return calc(m,re,i,d);}
+/* Venda ideal = (meta mensal ÷ dias úteis) × dias com movimento da loja em Vendas diárias (valor maior que zero) */
+let MOV_IDX=null;
+function diasMov(lojaId,ano,mes){if(!MOV_IDX){MOV_IDX={};for(const x of Object.values(S.diario))if(num(x.valor)>0){const k=x.data.slice(0,7)+'|'+x.lojaId;MOV_IDX[k]=(MOV_IDX[k]||0)+1;}}
+  return MOV_IDX[`${ano}-${pad2(mes)}|${lojaId}`]||0;}
+function vIdeal(x){const dias=diasPeriodo(x.ano,x.mes);if(!dias)return 0;return r2(num(x.meta)/dias*diasMov(x.lojaId,x.ano,x.mes));}
+function agg(rows){let m=0,re=0,i=0,d=0;for(const x of rows){m+=num(x.meta);re+=num(x.vendaReal);i+=vIdeal(x);d+=num(x.devolucoes);}return calc(m,re,i,d);}
 function st(p){if(p==null||!isFinite(p))return{c:'nd',t:'Sem meta'};if(p<100)return{c:'below',t:'Abaixo da meta'};if(p<105)return{c:'hit',t:'Meta atingida'};return{c:'over',t:'Meta superada'};}
 function badge(p){const s=st(p);return `<span class="badge ${s.c}" title="${s.t}">${fmtPct(p)}</span>`;}
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
@@ -503,8 +508,8 @@ const LOADERS={
     r.forEach(x=>{const k=lkey(x.ano,x.mes,x.loja_id,x.vendedor_id);m[k]={ano:x.ano,mes:x.mes,lojaId:x.loja_id,vendedorId:x.vendedor_id,meta:Number(x.meta),vendaReal:Number(x.venda_real),
       vendaIdeal:x.venda_ideal==null?null:Number(x.venda_ideal),devolucoes:Number(x.devolucoes),atualizadoEm:Date.parse(x.atualizado_em),atualizadoPor:x.atualizado_por,origem:x.origem,_id:k};});S.lanc=m;},
   vendas_diarias:async()=>{try{const r=await fetchAll('vendas_diarias','data,loja_id,valor,atualizado_em',['data','loja_id']);const m={};
-      r.forEach(x=>{const k=dkey(x.data,x.loja_id);m[k]={data:x.data,lojaId:x.loja_id,valor:Number(x.valor),atualizadoEm:Date.parse(x.atualizado_em),_id:k};});S.diario=m;S.diarioErr=null;}
-    catch(e){console.error('vendas_diarias',e);S.diario={};S.diarioErr=(e&&(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')))?'tabela':dbErr(e);}},
+      r.forEach(x=>{const k=dkey(x.data,x.loja_id);m[k]={data:x.data,lojaId:x.loja_id,valor:Number(x.valor),atualizadoEm:Date.parse(x.atualizado_em),_id:k};});S.diario=m;S.diarioErr=null;MOV_IDX=null;}
+    catch(e){console.error('vendas_diarias',e);S.diario={};MOV_IDX=null;S.diarioErr=(e&&(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')))?'tabela':dbErr(e);}},
   historico:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('historico').select('*').order('em',{ascending:false}).limit(1000));
     S.hist=r.map(x=>({em:Date.parse(x.em),tipo:x.tipo,descricao:x.descricao,usuario:x.usuario}));},
   perfis:async()=>{if(!isAdmin()){await loadMe();return;}const r=await fetchAll('perfis','*',['id']);const m={};r.forEach(x=>{m[x.id]=mapPerfil(x);});S.perfis=m;
@@ -540,7 +545,7 @@ async function boot(){
 }
 function gate(t,m){$('#app').innerHTML=`<div class="gate" style="grid-column:1/-1"><h1>${esc(t)}</h1><p class="muted">${esc(m)}</p></div>`;}
 let curUid;
-function resetData(){S.lojas={};S.vendedores={};S.periodos={};S.lanc={};S.diario={};S.diarioErr=null;S.hist=[];S.perfis={};S.pre=[];S.mun={};S.munMeta=null;S.perfil=null;S.periodInit=false;S.dataStarted=false;
+function resetData(){S.lojas={};S.vendedores={};S.periodos={};S.lanc={};S.diario={};MOV_IDX=null;S.diarioErr=null;S.hist=[];S.perfis={};S.pre=[];S.mun={};S.munMeta=null;S.perfil=null;S.periodInit=false;S.dataStarted=false;
   S.loaded={lojas:false,vendedores:false,periodos:false,lanc:false};if(S.channel){S.sb.removeChannel(S.channel);S.channel=null;}}
 async function handleSession(session){
   const uid=session?.user?.id||null;
@@ -940,6 +945,7 @@ async function gravarDias(itens){
     if(it.valor==null){if(old==null)continue;delete S.diario[k];del.push(it);}
     else{if(old!=null&&r2(old)===r2(it.valor))continue;const rec={data:it.data,lojaId:it.lojaId,valor:r2(it.valor),atualizadoEm:Date.now()};S.diario[k]={...rec,_id:k};up.push(rec);}
     log.push(`${lojaNome(it.lojaId)}, ${it.data.split('-').reverse().join('/')}: ${old==null?'—':n2.format(old)} para ${it.valor==null?'—':n2.format(it.valor)}`);}
+  MOV_IDX=null;
   if(!up.length&&!del.length)return 0;
   S.pending=true;
   try{if(up.length)await sbq(S.sb.from('vendas_diarias').upsert(up.map(x=>toRow('vendas_diarias',x)),{onConflict:PK.vendas_diarias}));
@@ -983,7 +989,9 @@ function sheetRows(lojaId,ano,mes){
 function sheetHTML(lojaId,ano,mes){
   const ed=canWrite();const rows=sheetRows(lojaId,ano,mes);const loja=S.lojas[lojaId];
   const dias=diasPeriodo(ano,mes);
+  const nMov=diasMov(lojaId,ano,mes);
   const cellIn=(r,f)=>{const l=r.l||baseLanc(ano,mes,lojaId,r.vendId);
+    if(f==='vendaIdeal')return `<td class="ideal" title="${esc(dias?`${fmtBRL(num(l.meta))} ÷ ${fmtDias(dias)} dias úteis × ${nMov} ${nMov===1?'dia':'dias'} com movimento`:'Cadastre os dias úteis do mês')}">${fmtBRL(vIdeal(l))}</td>`;
     if(!ed)return `<td class="${f==='vendaIdeal'?'':'in'}">${fmtBRL(f==='vendaIdeal'&&l.vendaIdeal==null?num(l.meta):num(l[f]))}</td>`;
     const auto=f==='vendaIdeal'&&l.vendaIdeal==null;
     return `<td class="${f==='vendaIdeal'?'ideal':'in'}"><input class="cell${auto?' auto':''}" inputmode="decimal" aria-label="${esc(FIELD_LABEL[f]+' de '+r.nome)}" ${auto?'title="Igual à meta mensal. Digite outro valor para alterar; apague para voltar a seguir a meta."':''}
@@ -998,14 +1006,14 @@ function sheetHTML(lojaId,ano,mes){
   return `<section class="sheet" data-loja="${esc(lojaId)}">
     <div class="sheet-head"><h3>Acompanhamento mensal ${esc(loja?.nome||('Loja '+lojaId))} — ${MESES[mes-1]} ${ano}</h3>
       <div class="meta"><span>${esc([loja?.regiao,[loja?.cidade,loja?.uf].filter(Boolean).join('/')].filter(Boolean).join(', '))}</span>
-      <span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
+      <span>${nMov} ${nMov===1?'dia':'dias'} com movimento</span><span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
     <div class="tw"><table class="g"><thead><tr><th>Vendedores</th><th>Meta mensal</th><th>Venda real</th><th>Venda ideal</th><th>Devoluções</th><th>% dev.</th><th>Total líquido</th><th>Status atual</th><th>Status %</th></tr></thead>
     <tbody>${body}
     <tr class="tot"><td>Total</td><td>${fmtBRL(T.meta)}</td><td>${fmtBRL(T.real)}</td><td>${fmtBRL(T.ideal)}</td><td>${fmtBRL(T.dev)}</td><td>${fmtPct(T.pctDev)}</td><td>${fmtSigned(T.liq)}</td>
       <td class="stfill ${s.c}">${fmtSigned(T.status)}</td><td class="stfill ${s.c}">${fmtPct(T.pct)}</td></tr>
     <tr class="md"><td>Meta diária</td><td>${dias?fmtBRL(T.meta/dias):'—'}</td><td colspan="7" style="text-align:left;color:var(--ink-3)">${s.t}${upd?`, atualizado em ${fmtDT(upd)}`:''}</td></tr>
     </tbody></table></div>
-    ${ed?`<div class="sheet-foot">Células em laranja claro aceitam digitação. Valores são acumulados do mês. <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
+    ${ed?`<div class="sheet-foot">Células em laranja claro aceitam digitação. Valores são acumulados do mês. Venda ideal = meta mensal ÷ dias úteis × dias com movimento na aba Vendas diárias. <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
   </section>`;
 }
 
@@ -1550,7 +1558,7 @@ const GUIDE=[
  ['dias_uteis','Sim','Dias úteis do mês, de 1 a 31 (aceita meio dia, ex.: 23,5). Atualiza o cadastro do período.','23,5'],
  ['meta_mensal','Sim','Meta do mês. Use 0,00 quando não houver meta.','200000,00'],
  ['venda_real','Sim','Venda acumulada no mês até a data.','217583,40'],
- ['venda_ideal','Não','Se ficar vazio, a venda ideal acompanha a meta mensal.','200000,00'],
+ ['venda_ideal','Não','Opcional e não usado: o app calcula a venda ideal pela meta, dias úteis e dias com movimento em Vendas diárias.',''],
  ['devolucoes','Sim','Devoluções acumuladas no mês.','15201,96']];
 function readFile(file){
   if(/\.xlsx$/i.test(file.name)){lerArquivoXlsx(file);return;}
