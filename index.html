@@ -455,7 +455,7 @@ function icon(id){return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id
 /* ============ Estado ============ */
 const now=new Date();
 const S={reqSel:new Set(),lojasPub:null,sb:null,channel:null,me:{id:null,name:'',email:''},authView:'entrar',meLoaded:false,perfis:{},pre:[],
-  lojas:{},vendedores:{},periodos:{},lanc:{},diario:{},diarioErr:null,diasLoja:{},diasLojaErr:null,usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
+  lojas:{},vendedores:{},periodos:{},lanc:{},diario:{},diarioErr:null,diasLoja:{},diasLojaErr:null,acessos:{},usuarios:{},solic:{},perfil:null,sol:null,mun:{},munMeta:null,hist:[],papeis:{},membros:{},names:{},
   loaded:{lojas:false,vendedores:false,periodos:false,lanc:false},periodInit:false,
   view:'dashboard',f:{ano:now.getFullYear(),mes:now.getMonth()+1,gestor:'',regiao:'',uf:'',cidade:'',loja:'',vend:''},
   groupBy:'loja',regBy:'uf',acompMode:'loja',cmp:{anos:null,base:'min',de:null,ate:null,by:'loja'},cadTab:'lojas',histQ:'',cadQ:'',imp:null,editing:false,pending:false,modal:null,charts:{}};
@@ -545,6 +545,8 @@ const LOADERS={
   dias_uteis_lojas:async()=>{try{const r=await fetchAll('dias_uteis_lojas','ano,mes,loja_id,dias_uteis',['ano','mes','loja_id']);const m={};
       r.forEach(x=>{const k=dlkey(x.ano,x.mes,x.loja_id);m[k]={ano:x.ano,mes:x.mes,lojaId:x.loja_id,diasUteis:Number(x.dias_uteis),_id:k};});S.diasLoja=m;S.diasLojaErr=null;}
     catch(e){console.error('dias_uteis_lojas',e);S.diasLoja={};S.diasLojaErr=(e&&(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')))?'tabela':dbErr(e);}},
+  acessos:async()=>{if(!isAdmin())return;try{const r=await sbq(S.sb.from('acessos').select('usuario_id,ultimo_acesso,total'));
+      S.acessos=Object.fromEntries(r.map(x=>[x.usuario_id,{em:Date.parse(x.ultimo_acesso)||null,total:x.total||0}]));S.acessosErr=null;}catch(e){S.acessos={};S.acessosErr=true;}},
   historico:async()=>{if(!isAdmin())return;const r=await sbq(S.sb.from('historico').select('*').order('em',{ascending:false}).limit(1000));
     S.hist=r.map(x=>({em:Date.parse(x.em),tipo:x.tipo,descricao:x.descricao,usuario:x.usuario}));},
   perfis:async()=>{if(!isAdmin()){await loadMe();return;}const r=await fetchAll('perfis','*',['id']);const m={};r.forEach(x=>{m[x.id]=mapPerfil(x);});S.perfis=m;
@@ -592,6 +594,10 @@ async function handleSession(session){
   S.meLoaded=true;startData();
 }
 async function loadMe(){const d=await sbq(S.sb.from('perfis').select('*').eq('id',S.me.id).maybeSingle());S.perfil=mapPerfil(d);S.me.name=S.perfil?.nome||'';}
+/* Registra a última vez que o usuário abriu o app (no máximo a cada 10 minutos) */
+function registrarAcesso(){if(!S.sb||!S.me.id||!role())return;const t=Date.now();if(S._ping&&t-S._ping<600000)return;S._ping=t;
+  S.sb.rpc('registrar_acesso').then(({error})=>{if(error)console.warn('registrar_acesso',error.message);else if(isAdmin())reloadSoon('acessos',1500);});}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')registrarAcesso();});
 function startData(){
   if(!S.channel){S.channel=S.sb.channel('dados-'+S.me.id);
     ['lojas','vendedores','periodos','lancamentos','vendas_diarias','dias_uteis_lojas'].forEach(t=>S.channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{if(role())reloadSoon(t);}));
@@ -599,8 +605,8 @@ function startData(){
       if((p.new&&p.new.id===S.me.id)||(p.old&&p.old.id===S.me.id)){loadMe().then(()=>{if(role()&&!S.dataStarted)startData();else if(!role()){S.dataStarted=false;}schedule();});}
       if(isAdmin())reloadSoon('perfis');});
     S.channel.subscribe();}
-  if(role()&&!S.dataStarted){S.dataStarted=true;
-    if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios','regras_importacao'].forEach(t=>reload(t));}
+  if(role()&&!S.dataStarted){S.dataStarted=true;registrarAcesso();
+    if(isAdmin()){S.loaded.perfis=false;['perfis','pre_aprovacoes','historico','municipios','regras_importacao','acessos'].forEach(t=>reload(t));}
     ['lojas','vendedores','periodos','lancamentos','vendas_diarias','dias_uteis_lojas'].forEach(t=>reload(t));}
   render();
 }
@@ -1988,17 +1994,21 @@ function acessoTxt(u){if(u.perfil==='admin')return 'Todas as lojas, com edição
   if(u.perfil==='gestao'&&(u.regioes||[]).length)p.push(`Região ${u.regioes.join(', ')}`);
   const ex=(u.lojas||[]).filter(id=>S.lojas[id]);if(ex.length)p.push(ex.length<=4?ex.map(lojaNome).join(', '):`${ex.length} lojas`);
   return `${p.join(' + ')||'Nenhuma loja'} (${lj.length} ${lj.length===1?'loja':'lojas'})`;}
+function ultAcesso(id){const a=S.acessos[id];if(S.acessosErr)return '<span class="muted" title="Rode o arquivo ultimo_acesso.sql no Supabase">—</span>';
+  if(!a||!a.em)return '<span class="muted">Nunca</span>';const dias=Math.floor((new Date().setHours(0,0,0,0)-new Date(a.em).setHours(0,0,0,0))/864e5);
+  const rel=dias<=0?'hoje':dias===1?'ontem':`há ${dias} dias`;
+  return `${fmtDT(a.em)}<span class="vsub" ${dias>=7?'style="color:var(--below)"':''}>${rel}${a.total?` · ${a.total} ${a.total===1?'acesso':'acessos'}`:''}</span>`;}
 function viewUsers(v){destroyCharts();
   const all=Object.values(S.perfis||{});const pend=pendentes();
   const us=all.filter(u=>u.status==='aprovado'||u.status==='bloqueado').sort((a,b)=>sortPt(a.nome,b.nome));
   const rec=all.filter(u=>u.status==='recusado');const pre=S.pre||[];
-  v.innerHTML=`
+  v.innerHTML=`${S.acessosErr?'<div class="notice">Para ver o último acesso de cada usuário, rode o arquivo <b>ultimo_acesso.sql</b> no SQL Editor do Supabase.</div>':''}
   <div class="bar"><p class="muted" style="margin:0;flex:1;min-width:260px">Cada pessoa cria a própria conta com e-mail e senha e confirma o e-mail. Depois disso, a solicitação aparece aqui para aprovação. Você também pode pré-aprovar um e-mail antes do cadastro.</p>
     <button class="btn" data-act="preNovo">Pré-aprovar e-mail</button></div>
   <h2 class="sec">Solicitações pendentes <small>${pend.length}</small></h2>
   ${pend.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Lojas solicitadas</th><th>Enviada em</th><th></th></tr></thead><tbody>${pend.map(s=>`<tr><td>${esc(s.nome)}</td><td>${esc(s.email)}</td><td style="white-space:normal;min-width:200px">${esc((s.lojasSolicitadas||[]).map(lojaNome).join(', ')||'—')}${s.mensagem?`<span class="vsub">${esc(s.mensagem)}</span>`:''}</td><td class="num">${fmtDT(s.solicitadoEm)}</td><td class="r"><button class="btn small primary" data-act="aprovar" data-id="${esc(s.id)}">Aprovar</button> <button class="btn small danger" data-act="recusar" data-id="${esc(s.id)}">Recusar</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><p>Nenhuma solicitação aguardando aprovação.</p></div>'}
   <h2 class="sec">Usuários com acesso <small>${us.length}</small></h2>
-  ${us.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Acesso</th><th>Situação</th><th>Aprovado em</th><th></th></tr></thead><tbody>${us.map(u=>{const self=u.id===S.me.id;return `<tr><td>${esc(u.nome||'—')}${self?' (você)':''}</td><td>${esc(u.email)}</td><td>${PERFIL_LABEL[u.perfil]||'—'}</td><td style="white-space:normal;min-width:220px">${esc(acessoTxt(u))}</td><td>${u.status==='bloqueado'?'<span class="badge below">Suspenso</span>':'<span class="badge hit">Ativo</span>'}</td><td class="num">${fmtDate(u.aprovadoEm||u.decididoEm)}</td>
+  ${us.length?`<div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Acesso</th><th>Situação</th><th>Último acesso</th><th>Aprovado em</th><th></th></tr></thead><tbody>${us.map(u=>{const self=u.id===S.me.id;return `<tr><td>${esc(u.nome||'—')}${self?' (você)':''}</td><td>${esc(u.email)}</td><td>${PERFIL_LABEL[u.perfil]||'—'}</td><td style="white-space:normal;min-width:220px">${esc(acessoTxt(u))}</td><td>${u.status==='bloqueado'?'<span class="badge below">Suspenso</span>':'<span class="badge hit">Ativo</span>'}</td><td class="num">${ultAcesso(u.id)}</td><td class="num">${fmtDate(u.aprovadoEm||u.decididoEm)}</td>
     <td class="r">${self?'':`<button class="btn small" data-act="editAcesso" data-id="${esc(u.id)}">Editar acesso</button> ${u.status==='bloqueado'?`<button class="btn small" data-act="reativar" data-id="${esc(u.id)}">Reativar</button>`:`<button class="btn small danger" data-act="suspender" data-id="${esc(u.id)}">Suspender</button>`}`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty"><p>Nenhum usuário aprovado ainda.</p></div>'}
   ${pre.length?`<h2 class="sec">E-mails pré-aprovados <small>aguardando cadastro</small></h2><div class="tw"><table class="t"><thead><tr><th>E-mail</th><th>Nome</th><th>Perfil</th><th>Acesso</th><th></th></tr></thead><tbody>${pre.map(x=>`<tr><td>${esc(x.email)}</td><td>${esc(x.nome||'—')}</td><td>${PERFIL_LABEL[x.perfil]}</td><td style="white-space:normal">${esc(acessoTxt(x))}</td><td class="r"><button class="btn small danger" data-act="preDel" data-id="${esc(x.email)}">Remover</button></td></tr>`).join('')}</tbody></table></div>`:''}
   ${rec.length?`<h2 class="sec">Solicitações recusadas <small>${rec.length}</small></h2><div class="tw"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Recusada em</th><th></th></tr></thead><tbody>${rec.map(u=>`<tr><td>${esc(u.nome||'—')}</td><td>${esc(u.email)}</td><td class="num">${fmtDate(u.decididoEm)}</td><td class="r"><button class="btn small" data-act="aprovar" data-id="${esc(u.id)}">Aprovar</button></td></tr>`).join('')}</tbody></table></div>`:''}`;}
