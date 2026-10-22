@@ -1,30 +1,20 @@
 {
+  "id": "./",
   "name": "Tintomax Comércio de Tintas LTDA",
   "short_name": "Tintomax",
-  "description": "Tintomax Comércio de Tintas LTDA: acompanhamento mensal de vendas por loja e vendedor",
+  "description": "Acompanhamento mensal de vendas por loja e vendedor da Tintomax",
   "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#F4F3F1",
   "theme_color": "#C94A0A",
+  "categories": ["business", "productivity"],
   "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
