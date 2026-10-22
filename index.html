@@ -784,7 +784,7 @@ document.addEventListener('click',e=>{
     cmpComuns:()=>{const K=cmpState();S.cmp.de=K.comuns[0];S.cmp.ate=K.comuns[K.comuns.length-1];render();},
     cmpYear:()=>{const K=cmpState();const y=Number(d.v);let a=[...K.anos];if(a.includes(y)){if(a.length===1)return;a=a.filter(x=>x!==y);}else{if(a.length>=6){toast('Compare até 6 anos por vez.',true);return;}a.push(y);}S.cmp.anos=a.sort((p,q)=>p-q);S.cmp.de=null;S.cmp.ate=null;render();},
     acompMode:()=>{S.acompMode=d.v;render();},
-    diarioCSV:()=>exportDiario(),
+    diarioCSV:()=>exportDiario(),excluirMov:()=>formExcluirMov(),
     diasMassa:()=>formDiasMassa(),
     cadTab:()=>{S.cadTab=d.v;S.cadQ='';render();},
     openLoja:()=>openLojaDetail(d.id),
@@ -935,7 +935,8 @@ function viewDiario(v){
   destroyCharts();
   const msgCab=S.f.mes==='all'||S.diarioErr?'':(S.f.loja||lojasDiario(S.f.ano,S.f.mes).length===1)?'Venda de cada dia por vendedor. A soma do mês de cada vendedor é a venda real na aba Acompanhamento.':'Visão consolidada por loja. Para lançar por vendedor, escolha uma loja no filtro ou clique no nome da loja.';
   const head=`<div class="bar"><span class="muted" style="font-size:13.5px">${msgCab}</span><span class="grow"></span>
-    ${S.f.mes!=='all'&&!S.diarioErr?'<button class="btn small" data-act="diarioCSV">Baixar CSV</button>':''}</div>`;
+    ${S.f.mes!=='all'&&!S.diarioErr?'<button class="btn small" data-act="diarioCSV">Baixar CSV</button>':''}
+    ${isAdmin()&&!S.diarioErr?'<button class="btn small" data-act="excluirMov">Excluir movimento</button>':''}</div>`;
   if(S.diarioErr==='tabela'||S.diarioErr==='coluna'){const arq=S.diarioErr==='tabela'?'vendas_diarias.sql</b> e depois o <b>vendas_diarias_vendedor.sql':'vendas_diarias_vendedor.sql';
     v.innerHTML=head+`<div class="empty"><h2 class="sec" style="justify-content:center">Falta atualizar o banco de dados</h2>
     <p>${isAdmin()?`Rode o arquivo <b>${arq}</b> no SQL Editor do Supabase e recarregue a página.`:'O administrador ainda precisa ativar esta aba no banco de dados.'}</p></div>`;return;}
@@ -1032,6 +1033,42 @@ async function exportDiario(){const ano=S.f.ano,mes=S.f.mes;if(mes==='all')retur
   rows.push(['Meta mensal','',...D.cols.map(c=>f(c.meta)),f(D.meta),'','']);
   const nome=D.modo==='vend'?`vendas_diarias_${D.loja.id}_${ano}-${pad2(mes)}.csv`:`vendas_diarias_lojas_${ano}-${pad2(mes)}.csv`;
   await download(nome,'﻿'+[head,...rows].map(r=>r.join(';')).join('\r\n'));}
+/* Excluir o movimento diário (vendas e devoluções de todos os vendedores) de uma loja num dia ou período */
+function formExcluirMov(){
+  const lojas=Object.values(S.lojas).filter(l=>lojaOk(l.id)).sort((a,b)=>sortPt(a.nome,b.nome));
+  const hoje=isoDia(now.getFullYear(),now.getMonth()+1,now.getDate());
+  const lj0=S.f.loja&&S.lojas[S.f.loja]?S.f.loja:'';
+  const dmy=d=>d.split('-').reverse().join('/');
+  formModal('Excluir movimento',`
+    <p class="muted" style="margin-top:0">Apaga as vendas e devoluções diárias de todos os vendedores da loja no período escolhido. Use para limpar uma importação errada; depois é só importar de novo.</p>
+    <label class="field"><span>Loja</span><select class="inp" name="loja"><option value="">Escolha a loja…</option>${lojas.map(l=>`<option value="${esc(l.id)}" ${l.id===lj0?'selected':''}>${esc(l.nome)} (${esc(l.id)})</option>`).join('')}</select></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label class="field"><span>Data inicial</span><input class="inp" type="date" name="ini" value="${hoje}"></label>
+      <label class="field"><span>Data final</span><input class="inp" type="date" name="fim" value="${hoje}"></label>
+    </div>
+    <div class="notice" id="xm-prev" style="margin-bottom:0"></div>`,
+  async root=>{const loja=fv(root,'loja'),ini=fv(root,'ini'),fim=fv(root,'fim');
+    if(!loja)return 'Escolha a loja.';if(!ini||!fim)return 'Informe as duas datas.';if(fim<ini)return 'A data final não pode ser antes da inicial.';
+    const sel=Object.values(S.diario).filter(x=>x.lojaId===loja&&x.data>=ini&&x.data<=fim);
+    if(!sel.length)return 'Não há movimento desta loja no período escolhido.';
+    const per=ini===fim?`dia ${dmy(ini)}`:`${dmy(ini)} a ${dmy(fim)}`;
+    if(!root.dataset.ok){root.dataset.ok=per+'|'+loja;$('#ferr').textContent='';
+      root.querySelector('[data-save]').textContent='Confirmar exclusão';
+      return `Confira o resumo acima e clique em "Confirmar exclusão". Esta ação não pode ser desfeita.`;}
+    if(root.dataset.ok!==per+'|'+loja){delete root.dataset.ok;root.querySelector('[data-save]').textContent='Excluir movimento';return 'O período ou a loja mudou. Confira o resumo e clique de novo.';}
+    try{await sbq(S.sb.from('vendas_diarias').delete().eq('loja_id',loja).gte('data',ini).lte('data',fim));
+      const tot=sel.reduce((a,x)=>a+num(x.valor),0);
+      logHist('Exclusão',`Excluiu o movimento diário de ${lojaNome(loja)}, ${per}: ${sel.length} lançamentos, ${fmtBRL(tot)}`);
+      await reload('vendas_diarias');toast(`Movimento de ${lojaNome(loja)} excluído (${per}).`);render();}
+    catch(e){return dbErr(e);}},{label:'Excluir movimento',cls:'danger'});
+  const root=$('#modal-root');
+  const prev=()=>{delete root.dataset.ok;const b=root.querySelector('[data-save]');if(b)b.textContent='Excluir movimento';$('#ferr').textContent='';
+    const loja=fv(root,'loja'),ini=fv(root,'ini'),fim=fv(root,'fim');const box=$('#xm-prev');
+    if(!loja||!ini||!fim||fim<ini){box.textContent='Escolha a loja e o período para ver o que será excluído.';return;}
+    const sel=Object.values(S.diario).filter(x=>x.lojaId===loja&&x.data>=ini&&x.data<=fim);
+    const dias=new Set(sel.map(x=>x.data)).size,tot=sel.reduce((a,x)=>a+num(x.valor),0),dev=sel.reduce((a,x)=>a+num(x.dev),0);
+    box.innerHTML=sel.length?`Será excluído: <b>${dias} ${dias===1?'dia':'dias'}</b> com movimento, <b>${sel.length}</b> ${sel.length===1?'lançamento':'lançamentos'}, venda de <b>${fmtBRL(tot)}</b>${dev?` e devoluções de <b>${fmtBRL(dev)}</b>`:''}.`:'Não há movimento desta loja no período escolhido.';};
+  root.querySelector('.modal').addEventListener('change',prev);root.querySelector('.modal').addEventListener('input',prev);prev();}
 function formDiasMassa(){
   const ano0=S.f.ano,mes0=S.f.mes==='all'?(now.getMonth()+1):S.f.mes;
   const lojas=Object.values(S.lojas).filter(l=>l.ativo!==false).sort((a,b)=>sortPt(a.id,b.id));
@@ -1873,8 +1910,8 @@ function viewCad(v){
   v.innerHTML=tabs+body;
 }
 function emptyCad(w){return `<div class="empty"><p>Nenhum ${w} encontrado. ${canWrite()?'Cadastre manualmente ou importe um CSV: lojas e vendedores novos podem ser criados durante a importação.':''}</p></div>`;}
-function formModal(title,fieldsHTML,onSave){
-  openModal(title,()=>fieldsHTML+'<div class="ferr" id="ferr"></div>',{size:'sm',footer:'<button class="btn" data-close2>Cancelar</button><button class="btn primary" data-save>Salvar</button>'});
+function formModal(title,fieldsHTML,onSave,{label='Salvar',cls='primary'}={}){
+  openModal(title,()=>fieldsHTML+'<div class="ferr" id="ferr"></div>',{size:'sm',footer:`<button class="btn" data-close2>Cancelar</button><button class="btn ${cls}" data-save>${esc(label)}</button>`});
   S.modal.refresh=null;
   const root=$('#modal-root');root.querySelector('[data-close2]').onclick=closeModal;
   const save=async()=>{const err=await onSave(root);if(err){$('#ferr').textContent=err;}else closeModal();};
