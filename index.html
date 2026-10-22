@@ -972,7 +972,7 @@ function viewDiario(v){
     +row('% da meta',c=>`<td>${c.meta?badge(c.soma/c.meta*100):'—'}</td>`,D.meta?badge(pct):'—')
     +(D.devT?row('Devoluções do mês',c=>`<td class="mut">${c.dev?fmtBRL(c.dev):'—'}</td>`,fmtBRL(D.devT)):'');
   const titulo=D.modo==='vend'?`Vendas diárias ${esc(D.loja.nome)} — ${MESES[mes-1]} ${ano}`:`Vendas diárias por loja — ${MESES[mes-1]} ${ano}`;
-  const sub=D.modo==='vend'?(n=>`${n} ${n===1?'vendedor':'vendedores'}${S.f.vend?' (filtro aplicado)':''}`)(D.cols.filter(c=>!ESP(c.vendId)).length):`${D.cols.length} ${D.cols.length===1?'loja':'lojas'}`;
+  const sub=D.modo==='vend'?(n=>`${n} ${n===1?'vendedor':'vendedores'}${S.f.vend?' (filtro aplicado)':''}`)(D.cols.filter(c=>c.vendId!==OUT).length):`${D.cols.length} ${D.cols.length===1?'loja':'lojas'}`;
   v.innerHTML=head+kpis+`
   <section class="sheet"><div class="sheet-head"><h3>${titulo}</h3>
     <div class="meta"><span>${sub}</span><span class="dias">Dias úteis <b>${D.diasLbl}</b></span></div></div>
@@ -1096,7 +1096,7 @@ function sheetHTML(lojaId,ano,mes){
     return `<td class="${f==='vendaIdeal'?'ideal':'in'}"><input class="cell${auto?' auto':''}" inputmode="decimal" aria-label="${esc(FIELD_LABEL[f]+' de '+r.nome)}" ${auto?'title="Igual à meta mensal. Digite outro valor para alterar; apague para voltar a seguir a meta."':''}
       data-k="${esc(r.key)}" data-f="${f}" data-loja="${esc(lojaId)}" data-vend="${esc(r.vendId)}" data-ano="${ano}" data-mes="${mes}" value="${esc(fmtCellVal(l,f))}"></td>`;};
   const body=rows.map(r=>{const c=r.l?agg([r.l]):calc(0,0,0,0);
-    return `<tr class="${ESP(r.vendId)?'outros':''}"><td>${ESP(r.vendId)?vendNome(r.vendId):`<button class="link" data-act="openVend" data-id="${esc(r.vendId)}">${esc(r.nome)}</button>`}${!ESP(r.vendId)&&S.vendedores[r.vendId]?.lojaId&&S.vendedores[r.vendId].lojaId!==lojaId?'<span class="vsub">vinculado a outra loja</span>':''}</td>
+    return `<tr class="${r.vendId===OUT?'outros':''}"><td>${r.vendId===OUT?'Outros':`<button class="link" data-act="openVend" data-id="${esc(r.vendId)}">${esc(r.nome)}</button>`}${!ESP(r.vendId)&&S.vendedores[r.vendId]?.lojaId&&S.vendedores[r.vendId].lojaId!==lojaId?'<span class="vsub">vinculado a outra loja</span>':''}</td>
       ${cellIn(r,'meta')}${cellIn(r,'vendaReal')}${cellIn(r,'vendaIdeal')}${cellIn(r,'devolucoes')}
       <td>${fmtPct(c.pctDev)}</td><td>${fmtSigned(c.liq)}</td>
       <td class="${c.status<0?'neg':(c.status>0?'pos':'')}">${fmtSigned(c.status)}</td><td>${badge(c.pct)}</td></tr>`;}).join('');
@@ -1126,7 +1126,7 @@ function viewDashboard(v){
   const rows=lancs();const T=agg(rows);const s=st(T.pct);const ano=S.f.ano,mes=S.f.mes;
   const md=metaDiaria(rows,ano,mes);const dtx=diasTxt([...new Set(rows.map(r=>r.lojaId))],ano,mes);
   const byLoja=groupRows(rows,'loja');const lojasMeta=byLoja.filter(g=>g.c.meta>0);const lojasOk=lojasMeta.filter(g=>g.c.liq>=g.c.meta);
-  const byVend=groupRows(rows.filter(r=>!ESP(r.vendedorId)),'vend');const vMeta=byVend.filter(g=>g.c.meta>0);const vOk=vMeta.filter(g=>g.c.liq>=g.c.meta);
+  const byVend=groupRows(rows.filter(r=>r.vendedorId!==OUT),'vend');const vMeta=byVend.filter(g=>g.c.meta>0);const vOk=vMeta.filter(g=>g.c.liq>=g.c.meta);
   v.innerHTML=`
   ${!rows.length?`<div class="notice">Não há lançamentos para ${esc(periodoLabel().toLowerCase())} com os filtros escolhidos.</div>`:''}
   <div class="kpis">
@@ -1643,7 +1643,7 @@ function viewRelatorio(v){
     <td><select data-reldest="${esc(l.id)}">${[['vend','Vendedor'],['assistente','Assistente'],['outros','Outros'],['ignorar','Ignorar']].map(([k,t])=>opt(k,t,R.destinos[l.id])).join('')}</select></td></tr>`;}).join('')}
   </tbody><tfoot><tr><td></td><td>Soma do arquivo</td><td></td><td class="r">${fmtBRL(res.sa.venda)}</td><td class="r">${fmtBRL(res.sa.dev)}</td><td class="r">${fmtSigned(res.sa.venda-res.sa.dev)}</td><td></td></tr>
   ${tot?`<tr><td></td><td>Total Geral do relatório</td><td></td><td class="r">${fmtBRL(tot.venda)}</td><td class="r">${fmtBRL(tot.dev)}</td><td class="r">${fmtSigned(tot.liq)}</td><td></td></tr>`:''}</tfoot></table></div>
-  <p class="muted" style="font-size:13px">Use "Assistente" para os assistentes de venda: os valores entram somados na linha Assistentes da loja, que conta no total da loja mas não entra no ranking de vendedores. Use "Outros" para os demais usuários que não são vendedores (por exemplo, analistas): os valores entram somados na linha Outros. ${dia?'Reimportar o mesmo dia substitui os valores daquele dia, sem somar de novo.':'Reimportar o mesmo mês substitui a venda e as devoluções, sem somar de novo.'}</p>`;
+  <p class="muted" style="font-size:13px">Use "Assistente" para os assistentes de venda: os valores entram somados na linha Assistentes da loja, que conta no total da loja e entra no ranking e nas metas como um vendedor. Use "Outros" para os demais usuários que não são vendedores (por exemplo, analistas): os valores entram somados na linha Outros. ${dia?'Reimportar o mesmo dia substitui os valores daquele dia, sem somar de novo.':'Reimportar o mesmo mês substitui a venda e as devoluções, sem somar de novo.'}</p>`;
 }
 async function lembrarRegras(R){if(!R.lembrar)return;
   try{const set=R.dados.linhas.filter(l=>R.destinos[l.id]!=='vend').map(l=>({vendedor_id:l.id,destino:R.destinos[l.id]}));
