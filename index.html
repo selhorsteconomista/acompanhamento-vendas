@@ -1548,6 +1548,23 @@ function parseRelatorio(rows){
     const venda=r2(nums[0]),dev=r2(Math.abs(nums[1])),liq=nums.length>2?r2(nums[2]):r2(venda-dev);
     linhas.push({linha:r.r,id:mm[2],nomeOrig:mm[1].trim(),nome:titulo(mm[1].trim()),venda,dev,liq,difere:Math.abs(r2(venda-dev)-liq)>0.02});}
   return{periodo,linhas,total};}
+/* Descobre a loja do relatório: 1) texto do cabeçalho (Loja/Empresa/Filial: 12); 2) nome do arquivo (loja12, loja_19);
+   3) loja onde estão cadastrados a maioria dos vendedores do arquivo. Só aceita lojas já cadastradas no app. */
+function detectarLoja(rows,fileName,dados){
+  const ids=Object.keys(S.lojas);if(!ids.length)return null;
+  const acha=cod=>{if(cod==null)return null;const c=String(cod).replace(/^0+(?=\d)/,'');return ids.find(i=>String(i).replace(/^0+(?=\d)/,'')===c)||null;};
+  const texto=rows.slice(0,15).flatMap(r=>r.cells.map(c=>String(c.val))).join(' | ');
+  const m=texto.match(/\b(?:loja|empresa|filial|unidade|estabelecimento)\s*[:\-]?\s*0*(\d{1,6})\b/i);
+  let id=m&&acha(m[1]);if(id)return{id,como:'cabeçalho do relatório'};
+  const nomes=ids.map(i=>({i,n:String(S.lojas[i].nome||'').trim().toLowerCase()})).filter(x=>x.n.length>=4);
+  const tl=texto.toLowerCase();const porNome=nomes.filter(x=>tl.includes(x.n));
+  if(porNome.length===1)return{id:porNome[0].i,como:'cabeçalho do relatório'};
+  const f=String(fileName||'').match(/loja[\s_\-.]*0*(\d{1,6})/i);id=f&&acha(f[1]);if(id)return{id,como:'nome do arquivo'};
+  const cont={};let conhecidos=0;
+  dados.linhas.forEach(l=>{const lj=S.vendedores[l.id]?.lojaId;if(lj&&S.lojas[lj]){cont[lj]=(cont[lj]||0)+1;conhecidos++;}});
+  const top=Object.entries(cont).sort((a,b)=>b[1]-a[1])[0];
+  if(top&&top[1]>=2&&top[1]/conhecidos>=0.6)return{id:top[0],como:`vendedores cadastrados (${top[1]} de ${dados.linhas.length})`};
+  return null;}
 function diasUteisMes(ano,mes){let n=0;const d=new Date(ano,mes-1,1);while(d.getMonth()===mes-1){const w=d.getDay();if(w&&w<6)n++;d.setDate(d.getDate()+1);}return n;}
 async function lerArquivoXlsx(file){
   try{const rows=await lerXlsx(await file.arrayBuffer());
@@ -1556,8 +1573,10 @@ async function lerArquivoXlsx(file){
     if(!dados.linhas.length){toast('Não reconheci o layout desta planilha. Use o relatório "Vendas por Vendedores" do sistema ou o modelo do app.',true);return;}
     const p=dados.periodo;const ano=p?p.ano:S.f.ano,mes=p?p.mes:(S.f.mes==='all'?now.getMonth()+1:S.f.mes);
     const destinos={};dados.linhas.forEach(l=>{destinos[l.id]=(S.regras&&S.regras[l.id])||'vend';});
-    const um=p&&p.ini===p.fim;const isoIni=p?p.ini.split('/').reverse().join('-'):isoDia(ano,mes,new Date().getDate());
-    S.imp=null;S.rel={modo:um?'dia':'mes',data:isoIni,fileName:file.name,dados,lojaId:S.f.loja||(Object.keys(S.lojas).length===1?Object.keys(S.lojas)[0]:''),ano,mes,dias:(S.periodos[pkey(ano,mes)]?.diasUteis)||diasUteisMes(ano,mes),destinos,lembrar:true,busy:false,result:null};render();
+    const isoIni=p?p.ini.split('/').reverse().join('-'):isoDia(ano,mes,new Date().getDate());
+    const auto=detectarLoja(rows,file.name,dados);
+    const lojaId=auto?auto.id:(S.f.loja||(Object.keys(S.lojas).length===1?Object.keys(S.lojas)[0]:''));
+    S.imp=null;S.rel={modo:'dia',data:isoIni,dataAuto:!!p,lojaAuto:auto,fileName:file.name,dados,lojaId,ano,mes,dias:(S.periodos[pkey(ano,mes)]?.diasUteis)||diasUteisMes(ano,mes),destinos,lembrar:true,busy:false,result:null};render();
   }catch(e){toast(e.message||'Não foi possível ler a planilha.',true);}}
 function gradeParaCSV(rows){const hi=rows.findIndex(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'));
   const head=rows[hi].cells;const cols=head.map(c=>c.col);const q=s=>/[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
@@ -1587,7 +1606,7 @@ function viewRelatorio(v){
   const comDiario=!dia&&R.lojaId&&temDiario(R.lojaId,Number(R.ano),Number(R.mes));
   v.innerHTML=`<div class="box">
     <div class="bar" style="margin:0"><h3 style="margin:0">Relatório do sistema: ${esc(R.fileName)}</h3><span class="grow"></span><span class="muted">${D.linhas.length} vendedores no arquivo</span></div>
-    <p class="muted" style="margin:6px 0 12px">${p?`Período do relatório: ${p.ini} a ${p.fim}.`:'Este arquivo não informa o período; confira o mês e o ano abaixo.'} O relatório não traz a loja nem a meta: escolha a loja; as metas já lançadas no app são mantidas.</p>
+    <p class="muted" style="margin:6px 0 12px">${p?`Período do relatório: ${p.ini} a ${p.fim}.`:'Este arquivo não informa o período; confira o mês e o ano abaixo.'} ${R.lojaAuto&&R.lojaId===R.lojaAuto.id?`Loja identificada automaticamente pelo ${esc(R.lojaAuto.como)}: <b>${esc(lojaNome(R.lojaId))}</b>. Confira antes de confirmar.`:'Não consegui identificar a loja pelo arquivo: escolha a loja abaixo.'} As metas já lançadas no app são mantidas.</p>
     ${dia&&p&&p.ini===p.fim?`<div class="notice">Relatório de um único dia: os valores entram em <b>Vendas diárias</b>, no dia ${p.ini}, por vendedor.</div>`:''}
     ${parcial?'<div class="notice">O período do relatório abrange mais de um mês. O app guarda valores por mês: gere o relatório de um mês por vez.</div>':''}
     ${dia&&p&&p.ini!==p.fim?`<div class="notice">Atenção: o relatório vai de ${p.ini} a ${p.fim}, mas todo o valor será lançado em um único dia. Para lançar dia a dia, gere o relatório com a Data Inicial igual à Data Final.</div>`:''}
