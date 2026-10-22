@@ -1531,6 +1531,9 @@ async function lerXlsx(buf){
       if(val===null||val===undefined||(typeof val==='string'&&val.trim()===''))continue;
       cells.push({col:colIdx(c.getAttribute('r')||'A1'),val});}
     cells.sort((a,b)=>a.col-b.col);rows.push({r:Number(r.getAttribute('r')),cells});}
+  // Data e hora em que o sistema gerou a planilha (propriedades do arquivo), usada quando o relatório não traz o período.
+  try{const core=await txt('docProps/core.xml');const c=core&&xml(core).getElementsByTagNameNS('*','created')[0];
+    const d=c&&new Date(c.textContent.trim());if(d&&!isNaN(d))rows.geradoEm=d;}catch(e){}
   return rows;}
 const numCel=v=>{if(typeof v==='number')return isFinite(v)?v:null;const s=String(v).trim().replace(/R\$\s*/,'');
   if(/^-?\d{1,3}(\.\d{3})*(,\d+)?$/.test(s)||/^-?\d+(,\d+)?$/.test(s))return Number(s.replace(/\./g,'').replace(',','.'));return null;};
@@ -1571,12 +1574,14 @@ async function lerArquivoXlsx(file){
     if(rows.some(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'))){analyzeCSV(gradeParaCSV(rows),file.name);return;}
     const dados=parseRelatorio(rows);
     if(!dados.linhas.length){toast('Não reconheci o layout desta planilha. Use o relatório "Vendas por Vendedores" do sistema ou o modelo do app.',true);return;}
-    const p=dados.periodo;const ano=p?p.ano:S.f.ano,mes=p?p.mes:(S.f.mes==='all'?now.getMonth()+1:S.f.mes);
+    const p=dados.periodo;const g0=rows.geradoEm;const ano=p?p.ano:g0?g0.getFullYear():S.f.ano,mes=p?p.mes:g0?g0.getMonth()+1:(S.f.mes==='all'?now.getMonth()+1:S.f.mes);
     const destinos={};dados.linhas.forEach(l=>{destinos[l.id]=(S.regras&&S.regras[l.id])||'vend';});
-    const isoIni=p?p.ini.split('/').reverse().join('-'):isoDia(ano,mes,new Date().getDate());
+    const ger=rows.geradoEm;
+    const isoIni=p?p.ini.split('/').reverse().join('-'):ger?isoDia(ger.getFullYear(),ger.getMonth()+1,ger.getDate()):isoDia(ano,mes,new Date().getDate());
+    const origemData=p?'periodo':ger?'gerado':'hoje';
     const auto=detectarLoja(rows,file.name,dados);
     const lojaId=auto?auto.id:(S.f.loja||(Object.keys(S.lojas).length===1?Object.keys(S.lojas)[0]:''));
-    S.imp=null;S.rel={modo:'dia',data:isoIni,dataAuto:!!p,lojaAuto:auto,fileName:file.name,dados,lojaId,ano,mes,dias:(S.periodos[pkey(ano,mes)]?.diasUteis)||diasUteisMes(ano,mes),destinos,lembrar:true,busy:false,result:null};render();
+    S.imp=null;S.rel={modo:'dia',data:isoIni,origemData,geradoEm:ger||null,lojaAuto:auto,fileName:file.name,dados,lojaId,ano,mes,dias:(S.periodos[pkey(ano,mes)]?.diasUteis)||diasUteisMes(ano,mes),destinos,lembrar:true,busy:false,result:null};render();
   }catch(e){toast(e.message||'Não foi possível ler a planilha.',true);}}
 function gradeParaCSV(rows){const hi=rows.findIndex(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'));
   const head=rows[hi].cells;const cols=head.map(c=>c.col);const q=s=>/[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
@@ -1606,7 +1611,7 @@ function viewRelatorio(v){
   const comDiario=!dia&&R.lojaId&&temDiario(R.lojaId,Number(R.ano),Number(R.mes));
   v.innerHTML=`<div class="box">
     <div class="bar" style="margin:0"><h3 style="margin:0">Relatório do sistema: ${esc(R.fileName)}</h3><span class="grow"></span><span class="muted">${D.linhas.length} vendedores no arquivo</span></div>
-    <p class="muted" style="margin:6px 0 12px">${p?`Período do relatório: ${p.ini} a ${p.fim}.`:'Este arquivo não informa o período; confira o mês e o ano abaixo.'} ${R.lojaAuto&&R.lojaId===R.lojaAuto.id?`Loja identificada automaticamente pelo ${esc(R.lojaAuto.como)}: <b>${esc(lojaNome(R.lojaId))}</b>. Confira antes de confirmar.`:'Não consegui identificar a loja pelo arquivo: escolha a loja abaixo.'} As metas já lançadas no app são mantidas.</p>
+    <p class="muted" style="margin:6px 0 12px">${p?`Período do relatório: ${p.ini} a ${p.fim}.`:R.origemData==='gerado'?`O arquivo não traz o período. Dia sugerido pela data em que o relatório foi gerado no sistema (${fmtDT(R.geradoEm.getTime())}): <b>confira o dia</b> se o relatório for de outra data.`:'Este arquivo não informa o período: confira o dia abaixo.'} ${R.lojaAuto&&R.lojaId===R.lojaAuto.id?`Loja identificada automaticamente pelo ${esc(R.lojaAuto.como)}: <b>${esc(lojaNome(R.lojaId))}</b>. Confira antes de confirmar.`:'Não consegui identificar a loja pelo arquivo: escolha a loja abaixo.'} As metas já lançadas no app são mantidas.</p>
     ${dia&&p&&p.ini===p.fim?`<div class="notice">Relatório de um único dia: os valores entram em <b>Vendas diárias</b>, no dia ${p.ini}, por vendedor.</div>`:''}
     ${parcial?'<div class="notice">O período do relatório abrange mais de um mês. O app guarda valores por mês: gere o relatório de um mês por vez.</div>':''}
     ${dia&&p&&p.ini!==p.fim?`<div class="notice">Atenção: o relatório vai de ${p.ini} a ${p.fim}, mas todo o valor será lançado em um único dia. Para lançar dia a dia, gere o relatório com a Data Inicial igual à Data Final.</div>`:''}
