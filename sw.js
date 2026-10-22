@@ -1,7 +1,7 @@
 // Service worker da Tintomax: guarda a "casca" do app para abrir rápido e permitir instalar no celular.
 // Os dados de vendas sempre vêm do Supabase e nunca ficam neste cache.
 // Ao publicar uma mudança grande no app, troque o número da versão abaixo (v2 -> v3...).
-const CACHE = 'tintomax-v2';
+const CACHE = 'tintomax-v3';
 const SHELL = [
   './', 'index.html', 'config.js', 'manifest.webmanifest',
   'favicon.svg', 'logo.png', 'apple-touch-icon.png',
@@ -35,7 +35,8 @@ self.addEventListener('fetch', e => {
   if (sameOrigin) {
     // Arquivos do app: internet primeiro (atualizações aparecem na hora); cache só quando estiver offline.
     e.respondWith(
-      fetch(req).then(guardar)
+      // no-cache: sempre confere com o servidor se há versão nova (o GitHub Pages guarda cópias por até 10 min).
+      fetch(req, { cache: 'no-cache' }).then(guardar)
         .catch(() => caches.match(req).then(r => r || caches.match('index.html')))
     );
   } else if (cdn) {
