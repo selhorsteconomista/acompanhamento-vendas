@@ -423,14 +423,17 @@ const fmtDias=v=>(v==null||v==='')?'—':typeof v==='string'&&!isFinite(Number(v
 function calc(meta,real,ideal,dev){meta=r2(meta);real=r2(real);dev=r2(dev);ideal=r2(ideal);const liq=r2(real-dev);
   return {meta,real,ideal,dev,liq,status:r2(liq-meta),pctDev:real?dev/real*100:null,pct:meta?liq/meta*100:null};}
 /* Venda ideal = (meta mensal ÷ dias úteis) × dias com movimento da loja em Vendas diárias (valor maior que zero) */
+/* Peso do dia: sábado vale meio dia (0,5); os demais dias valem 1 */
+const pesoDia=w=>w===6?0.5:1;
+const pesoData=iso=>pesoDia(new Date(Number(iso.slice(0,4)),Number(iso.slice(5,7))-1,Number(iso.slice(8,10))).getDay());
 let DIA_IDX=null;
 function diaIdx(){if(DIA_IDX)return DIA_IDX;const sum={},tem=new Set(),dia={},dev={},temDev=new Set();
   for(const x of Object.values(S.diario)){const kl=x.data.slice(0,7)+'|'+x.lojaId;tem.add(kl);const kv=kl+'|'+x.vendId;sum[kv]=(sum[kv]||0)+num(x.valor);
     if(x.dev!=null){temDev.add(kl);dev[kv]=(dev[kv]||0)+num(x.dev);}
     const kd=x.data+'|'+x.lojaId;dia[kd]=(dia[kd]||0)+num(x.valor);}
-  const mov={};for(const [kd,v] of Object.entries(dia))if(v>0){const i=kd.indexOf('|');const k=kd.slice(0,7)+'|'+kd.slice(i+1);mov[k]=(mov[k]||0)+1;}
+  const mov={};for(const [kd,v] of Object.entries(dia))if(v>0){const i=kd.indexOf('|');const k=kd.slice(0,7)+'|'+kd.slice(i+1);mov[k]=r2((mov[k]||0)+pesoData(kd.slice(0,10)));}
   return DIA_IDX={sum,tem,mov,dev,temDev};}
-/* Dias com movimento: dias em que a loja (somando os vendedores) teve venda maior que zero */
+/* Dias com movimento: dias em que a loja (somando os vendedores) teve venda maior que zero; sábado conta 0,5 */
 function diasMov(lojaId,ano,mes){return diaIdx().mov[`${ano}-${pad2(mes)}|${lojaId}`]||0;}
 const temDiario=(lojaId,ano,mes)=>diaIdx().tem.has(`${ano}-${pad2(mes)}|${lojaId}`);
 /* Venda real: soma das vendas diárias do vendedor no mês; se a loja não tem vendas diárias no mês, vale o valor lançado/importado */
@@ -926,10 +929,10 @@ function dadosDiario(ano,mes){
   let ultimo=0,acum=0,trab=0;const linhas=[];
   for(let d=1;d<=nd;d++){const w=new Date(ano,mes-1,d).getDay();let tot=0,tem=false;
     cols.forEach((c,i)=>{const v=val[i][d];if(v!=null){tot+=v;tem=true;}});
-    if(tem)ultimo=d;const util=(w>0&&w<6)||tot>0;if(util)trab++;acum+=tot;
+    if(tem)ultimo=d;const util=(w>0&&w<6)||tot>0;if(util)trab+=pesoDia(w);acum+=tot;
     linhas.push({d,w,tot:r2(tot),tem,util,acum:r2(acum),ideal:meta?r2(Math.min(meta,mdia*trab)):null});}
-  const trabAte=linhas.filter(l=>l.d<=ultimo&&l.util).length;
-  const restantes=linhas.filter(l=>l.d>ultimo&&l.w>0&&l.w<6).length;
+  const trabAte=r2(linhas.filter(l=>l.d<=ultimo&&l.util).reduce((a,l)=>a+pesoDia(l.w),0));
+  const restantes=r2(linhas.filter(l=>l.d>ultimo&&l.w>0).reduce((a,l)=>a+pesoDia(l.w),0));
   return{modo,loja:uma||null,nd,cols,val,devT,meta,mdia,dias,diasLbl:diasTxt(lojaIds,ano,mes),hoje,ultimo,linhas,total:r2(acum),trabAte,restantes};}
 function viewDiario(v){
   destroyCharts();
@@ -953,9 +956,9 @@ function viewDiario(v){
       <div><span class="badge ${s.c}">${D.meta?fmtPct(pct)+' da meta':'Sem meta lançada'}</span></div>
       <div class="s" style="margin-top:10px">${D.ultimo?`Lançado até o dia ${D.ultimo}`:'Nenhum dia lançado ainda'}</div></div>
     <div class="kpi"><div class="l">Meta mensal</div><div class="v">${fmtBRL(D.meta)}</div><div class="s">Meta diária ${D.meta?fmtBRL(D.mdia):'—'} em ${D.diasLbl} dias úteis</div></div>
-    <div class="kpi"><div class="l">Média por dia trabalhado</div><div class="v">${fmtBRL(media)}</div><div class="s">${D.trabAte} ${D.trabAte===1?'dia':'dias'} até o último lançamento</div></div>
+    <div class="kpi"><div class="l">Média por dia trabalhado</div><div class="v">${fmtBRL(media)}</div><div class="s">${fmtDias(D.trabAte)} ${D.trabAte===1?'dia':'dias'} até o último lançamento (sábado = meio dia)</div></div>
     <div class="kpi"><div class="l">Projeção para o mês</div><div class="v ${proj!=null&&D.meta?(proj<D.meta?'neg':'pos'):''}">${fmtBRL(proj)}</div><div class="s">Média diária × dias úteis</div></div>
-    <div class="kpi"><div class="l">Falta para a meta</div><div class="v">${fmtBRL(falta)}</div><div class="s">${porDia!=null?`${fmtBRL(porDia)} por dia útil restante (${D.restantes})`:(falta===0&&D.meta?'Meta alcançada':'—')}</div></div>
+    <div class="kpi"><div class="l">Falta para a meta</div><div class="v">${fmtBRL(falta)}</div><div class="s">${porDia!=null?`${fmtBRL(porDia)} por dia útil restante (${fmtDias(D.restantes)})`:(falta===0&&D.meta?'Meta alcançada':'—')}</div></div>
   </div>`;
   const th=D.cols.map(c=>`<th>${D.modo==='loja'?`<button class="link" data-act="filterLoja" data-id="${esc(c.lojaId)}" title="Abrir esta loja por vendedor">${esc(c.label)}</button>`:esc(c.label)}</th>`).join('');
   const body=D.linhas.map((L,r)=>{
@@ -1127,7 +1130,7 @@ function sheetHTML(lojaId,ano,mes){
   const cellIn=(r,f)=>{const l=r.l||baseLanc(ano,mes,lojaId,r.vendId);
     if(f==='vendaReal'&&temDiario(lojaId,ano,mes))return `<td class="ideal" title="Soma das vendas diárias de ${esc(r.nome)} no mês">${fmtBRL(vendaRealDe(l))}</td>`;
     if(f==='devolucoes'&&temDevDiario(lojaId,ano,mes))return `<td class="ideal" title="Soma das devoluções dos relatórios diários de ${esc(r.nome)} no mês">${fmtBRL(devDe(l))}</td>`;
-    if(f==='vendaIdeal')return `<td class="ideal" title="${esc(dias?`${fmtBRL(num(l.meta))} ÷ ${fmtDias(dias)} dias úteis × ${nMov} ${nMov===1?'dia':'dias'} com movimento`:'Cadastre os dias úteis do mês')}">${fmtBRL(vIdeal(l))}</td>`;
+    if(f==='vendaIdeal')return `<td class="ideal" title="${esc(dias?`${fmtBRL(num(l.meta))} ÷ ${fmtDias(dias)} dias úteis × ${fmtDias(nMov)} ${nMov===1?'dia':'dias'} com movimento (sábado = meio dia)`:'Cadastre os dias úteis do mês')}">${fmtBRL(vIdeal(l))}</td>`;
     if(!ed)return `<td class="${f==='vendaIdeal'?'':'in'}">${fmtBRL(f==='vendaIdeal'&&l.vendaIdeal==null?num(l.meta):num(l[f]))}</td>`;
     const auto=f==='vendaIdeal'&&l.vendaIdeal==null;
     return `<td class="${f==='vendaIdeal'?'ideal':'in'}"><input class="cell${auto?' auto':''}" inputmode="decimal" aria-label="${esc(FIELD_LABEL[f]+' de '+r.nome)}" ${auto?'title="Igual à meta mensal. Digite outro valor para alterar; apague para voltar a seguir a meta."':''}
@@ -1142,14 +1145,14 @@ function sheetHTML(lojaId,ano,mes){
   return `<section class="sheet" data-loja="${esc(lojaId)}">
     <div class="sheet-head"><h3>Acompanhamento mensal ${esc(loja?.nome||('Loja '+lojaId))} — ${MESES[mes-1]} ${ano}</h3>
       <div class="meta"><span>${esc([loja?.regiao,[loja?.cidade,loja?.uf].filter(Boolean).join('/')].filter(Boolean).join(', '))}</span>
-      <span>${nMov} ${nMov===1?'dia':'dias'} com movimento</span><span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" title="${proprio?'Valor desta loja':'Padrão do mês (Cadastros > Períodos). Digite para definir um valor só desta loja.'}" data-loja="${esc(lojaId)}" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
+      <span title="Sábado conta como meio dia">${fmtDias(nMov)} ${nMov===1?'dia':'dias'} com movimento</span><span class="dias">Dias úteis ${ed?`<input class="dias" type="text" inputmode="decimal" aria-label="Dias úteis" title="${proprio?'Valor desta loja':'Padrão do mês (Cadastros > Períodos). Digite para definir um valor só desta loja.'}" data-loja="${esc(lojaId)}" data-ano="${ano}" data-mes="${mes}" value="${dias==null?'':esc(fmtDias(dias))}">`:`<b>${fmtDias(dias)}</b>`}</span></div></div>
     <div class="tw"><table class="g"><thead><tr><th>Vendedores</th><th>Meta mensal</th><th>Venda real</th><th>Venda ideal</th><th>Devoluções</th><th>% dev.</th><th>Total líquido</th><th>Status atual</th><th>Status %</th></tr></thead>
     <tbody>${body}
     <tr class="tot"><td>Total</td><td>${fmtBRL(T.meta)}</td><td>${fmtBRL(T.real)}</td><td>${fmtBRL(T.ideal)}</td><td>${fmtBRL(T.dev)}</td><td>${fmtPct(T.pctDev)}</td><td>${fmtSigned(T.liq)}</td>
       <td class="stfill ${s.c}">${fmtSigned(T.status)}</td><td class="stfill ${s.c}">${fmtPct(T.pct)}</td></tr>
     <tr class="md"><td>Meta diária</td><td>${dias?fmtBRL(T.meta/dias):'—'}</td><td colspan="7" style="text-align:left;color:var(--ink-3)">${s.t}${upd?`, atualizado em ${fmtDT(upd)}`:''}</td></tr>
     </tbody></table></div>
-    ${ed?`<div class="sheet-foot">Células em laranja claro aceitam digitação. Valores são acumulados do mês. ${temDiario(lojaId,ano,mes)?`Venda real${temDevDiario(lojaId,ano,mes)?' e devoluções':''} = soma das vendas diárias de cada vendedor. `:''}Venda ideal = meta mensal ÷ dias úteis × dias com movimento na aba Vendas diárias. <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
+    ${ed?`<div class="sheet-foot">Células em laranja claro aceitam digitação. Valores são acumulados do mês. ${temDiario(lojaId,ano,mes)?`Venda real${temDevDiario(lojaId,ano,mes)?' e devoluções':''} = soma das vendas diárias de cada vendedor. `:''}Venda ideal = meta mensal ÷ dias úteis × dias com movimento na aba Vendas diárias (sábado conta como meio dia). <button class="link" data-act="newVend" data-loja="${esc(lojaId)}">Cadastrar vendedor nesta loja</button></div>`:''}
   </section>`;
 }
 
@@ -1608,7 +1611,7 @@ function detectarLoja(rows,fileName,dados){
   const top=Object.entries(cont).sort((a,b)=>b[1]-a[1])[0];
   if(top&&top[1]>=2&&top[1]/conhecidos>=0.6)return{id:top[0],como:`vendedores cadastrados (${top[1]} de ${dados.linhas.length})`};
   return null;}
-function diasUteisMes(ano,mes){let n=0;const d=new Date(ano,mes-1,1);while(d.getMonth()===mes-1){const w=d.getDay();if(w&&w<6)n++;d.setDate(d.getDate()+1);}return n;}
+function diasUteisMes(ano,mes){let n=0;const d=new Date(ano,mes-1,1);while(d.getMonth()===mes-1){const w=d.getDay();if(w)n+=pesoDia(w);d.setDate(d.getDate()+1);}return n;}
 async function lerArquivoXlsx(file){
   try{const rows=await lerXlsx(await file.arrayBuffer());
     if(rows.some(r=>r.cells.some(c=>String(c.val).trim().toLowerCase()==='loja_id'))){analyzeCSV(gradeParaCSV(rows),file.name);return;}
